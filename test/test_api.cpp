@@ -1,0 +1,692 @@
+/* Copyright 2025 Joaquin M Lopez Munoz.
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+ */
+
+#include <algorithm>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
+#include <boost/core/lightweight_test.hpp>
+#include <boost/interprocess/allocators/allocator.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/hub.hpp>
+#include <memory>
+#include <stdexcept>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
+enum tracked_provenance { ab_ovo = 0, from_copy, from_move };
+
+template<typename T>
+struct tracked
+{
+  tracked(const T& x_): x{x_}, origin{from_copy} {}
+  tracked(T&& x_): x{std::move(x_)}, origin{from_move} {}
+  tracked(const tracked& x_): x{x_.x}, origin{x_.origin}, last_op{from_copy} {}
+  tracked(tracked&& x_): 
+    x{std::move(x_.x)}, origin{x_.origin}, last_op{from_move} {}
+
+  tracked& operator=(const tracked& x_)
+  {
+    x = x_.x;
+    origin = x_.origin;
+    last_op = from_copy;
+    return *this;
+  }
+
+  tracked& operator=(tracked&& x_)
+  {
+    x = x_.x;
+    origin = x_.origin;
+    last_op = from_move;
+    return *this;
+  }
+
+  T x;
+  tracked_provenance origin, last_op = ab_ovo;
+};
+
+template<typename Hub, typename U>
+struct rebind_value_type;
+
+template<
+  template<typename...> class Hub, typename T, typename Allocator,
+  typename U
+>
+struct rebind_value_type<Hub<T, Allocator>, U>
+{
+  using type = Hub<
+    U, 
+    typename std::allocator_traits<Allocator>::template rebind_alloc<U>
+  >;
+};
+
+template<typename Hub, typename... Args>
+Hub noalloc_construct(
+  std::true_type, const typename Hub::allocator_type& al, Args&&... args)
+{
+  return Hub(std::forward<Args>(args)...);
+}
+
+template<typename Hub, typename... Args>
+Hub noalloc_construct(
+  std::false_type, const typename Hub::allocator_type& al, Args&&... args)
+{
+  return Hub(std::forward<Args>(args)..., al);
+}
+
+template<typename Hub, typename... Args>
+Hub noalloc_construct(
+  const typename Hub::allocator_type& al, Args&&... args)
+{
+  return noalloc_construct<Hub>(
+    std::is_default_constructible<typename Hub::allocator_type>{},
+    al, std::forward<Args>(args)...);
+}
+
+template<typename Hub, typename U>
+using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
+
+template<typename Container>
+void puncture(Container& x)
+{
+  for(auto first = x.begin(); first != x.end(); ) {
+    if(!(*first % 7)) first = x.erase(first);
+    else ++first;
+  }
+}
+
+template<typename T>
+std::vector<T> make_range(std::size_t n)
+{
+  std::vector<T> res;
+  T i = T();
+  while(n--) {
+    res.push_back(i);
+    i += T(1);
+  }
+  return res;
+}
+
+template<typename Container1, typename Container2>
+void test_equal(const Container1& x, const Container2& y)
+{
+  BOOST_TEST_EQ(x.size(), y.size());
+  BOOST_TEST(std::equal(x.begin(), x.end(), y.begin()));
+}
+
+template<typename Iterator, typename Mirror>
+void test_traversal(Iterator first, Iterator last, const Mirror& data)
+{
+  std::ptrdiff_t n = 0;
+  for(auto it = first; it != last; ++it, ++n)
+  {
+    BOOST_TEST(*it == data[n]);
+    BOOST_TEST((first == it) == (0 == n));
+    BOOST_TEST((first != it) == (0 != n));
+
+    auto it1 = it, it2 = ++it1, it3 = --it2, it4 = it3++, it5 = it3-- ;
+    BOOST_TEST(it1 == std::next(it));
+    BOOST_TEST(it2 == it);
+    BOOST_TEST(it3 == it);
+    BOOST_TEST(it4 == it);
+    BOOST_TEST(it5 == std::next(it));
+  }
+}
+
+#if !defined(BOOST_NO_CXX20_HDR_RANGES)
+
+/* 
+ https://bannalia.blogspot.com/2016/09/compile-time-checking-existence-of.html
+ */
+
+namespace from_range_t_fallback {
+struct from_range_t{};
+struct hook{};
+}
+
+namespace std {
+template<>
+struct hash< ::from_range_t_fallback::hook>
+{
+  using from_range_t_type = decltype([] {
+    using namespace ::from_range_t_fallback;
+    return from_range_t{};
+  }());
+
+  /* make standard happy */
+
+  std::size_t operator()(const ::from_range_t_fallback::hook&) const 
+  { 
+    return 0; 
+  }
+};
+}
+
+using from_range_t_or_else = 
+  typename std::hash<from_range_t_fallback::hook>::from_range_t_type;
+
+#else
+
+using from_range_t_or_else = void*;
+
+#endif
+
+template<
+  typename Hub, typename FromRangeT, typename R,
+  typename = typename std::enable_if<
+    std::is_constructible<
+      Hub, 
+      FromRangeT, R&&, const typename Hub::allocator_type&
+    >::value
+  >::type
+>
+void test_range_ctor_impl(FromRangeT, const R& rng, int)
+{
+  Hub x{FromRangeT{}, rng}, 
+         y{FromRangeT{}, rng, typename Hub::allocator_type{}};
+  test_equal(x, rng);
+  test_equal(y, rng);
+}
+
+template<typename Hub, typename FromRangeT, typename R>
+void test_range_ctor_impl(FromRangeT, const R&, ...)
+{
+}
+
+template<typename Hub, typename R>
+void test_range_ctor(const R& rng)
+{
+  test_range_ctor_impl<Hub>(from_range_t_or_else{}, rng, 0);
+}
+
+template<
+  typename Hub, typename R,
+  typename = typename std::enable_if<
+    sizeof(
+      std::declval<Hub>().assign_range(std::declval<const R&>()), 0) != 0
+  >::type*
+>
+void test_assign_range_impl(const R& rng, int)
+{
+  Hub x;
+  x.assign_range(rng);
+  test_equal(x, rng);
+}
+
+template<typename Hub, typename R>
+void test_assign_range_impl(const R&, ...)
+{
+}
+
+template<typename Hub, typename R>
+void test_assign_range(const R& rng)
+{
+  test_assign_range_impl<Hub>(rng, 0);
+}
+
+template<
+  typename Hub, typename R,
+  typename = typename std::enable_if<
+    sizeof(
+      std::declval<Hub>().insert_range(
+        std::declval<typename Hub::const_iterator>(),
+        std::declval<const R&>()), 0) != 0
+  >::type
+>
+void test_insert_range_impl(const R& rng, int)
+{
+  Hub x;
+  x.insert_range(x.cend(), rng);
+  test_equal(x, rng);
+  x.insert_range(x.cbegin() + 1, rng);
+  x.erase(x.cbegin());
+  x.erase(x.cbegin() + rng.size(), x.cend());
+  test_equal(x, rng);
+}
+
+template<typename Hub, typename R>
+void test_insert_range_impl(const R&, ...)
+{
+}
+
+template<typename Hub, typename R>
+void test_insert_range(const R& rng)
+{
+  test_insert_range_impl<Hub>(rng, 0);
+}
+
+template<typename Hub, typename R>
+void test_global_erase(const R& rng, const typename Hub::allocator_type& al)
+{
+  using value_type = typename Hub::value_type;
+  using size_type = typename Hub::size_type;
+
+  Hub         x{al};
+  auto        even = [](const value_type& v) { return (int)(v) % 2 == 0; };
+  const auto& odd_value = *std::find_if_not(rng.begin(), rng.end(), even);
+
+  BOOST_TEST_EQ(erase(x, odd_value), 0);
+  BOOST_TEST_EQ(x.size(), 0);
+  BOOST_TEST_EQ(erase_if(x, even), 0);
+  BOOST_TEST_EQ(x.size(), 0);
+
+  x.insert(rng.begin(), rng.end());
+  auto s = x.size();
+  auto n = erase(x, odd_value);
+  BOOST_TEST_EQ(
+    n, (size_type)std::count(rng.begin(), rng.end(), odd_value));
+  BOOST_TEST_EQ(std::count(x.begin(), x.end(), odd_value), 0);
+  BOOST_TEST_EQ(x.size(), s - n);
+  s = x.size();
+  n = erase_if(x, even);
+  BOOST_TEST_EQ(
+    n, (size_type)std::count_if(rng.begin(), rng.end(), even));
+  BOOST_TEST_EQ(std::count_if(x.begin(), x.end(), even), 0);
+  BOOST_TEST_EQ(x.size(), s - n);
+}
+
+#if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES) && \
+    !defined(BOOST_NO_CXX20_HDR_CONCEPTS)
+template<
+  template<typename...> class Hub, typename FromRangeT, typename R,
+  typename T = std::ranges::range_value_t<R>,
+  typename Allocator = std::allocator<T>,
+  typename = typename std::enable_if<
+    std::is_constructible<
+      Hub<T, Allocator>,
+      FromRangeT, R&&, const Allocator&
+    >::value
+  >::type
+>
+void test_range_ctad_impl(FromRangeT, const R& rng, int)
+{
+  Hub x{FromRangeT{}, rng}; 
+  Hub y{FromRangeT{}, rng, Allocator{}};
+  test_equal(x, rng);
+  test_equal(y, rng);
+}
+#endif
+
+template<template<typename...> class Hub, typename FromRangeT, typename R>
+void test_range_ctad_impl(FromRangeT, const R&, ...)
+{
+}
+
+template<template<typename...> class Hub, typename R>
+void test_range_ctad(const R& rng)
+{
+  test_range_ctad_impl<Hub>(from_range_t_or_else{}, rng, 0);
+}
+
+template<typename T> void avoid_unused_local_typedef() {}
+
+template<typename Hub>
+void test(const typename Hub::allocator_type& al = {})
+{
+  using value_type = typename Hub::value_type;
+  using allocator_type= typename Hub::allocator_type;
+  using pointer = typename Hub::pointer;
+  using const_pointer = typename Hub::const_pointer;
+  using reference = typename Hub::reference;
+  using const_reference = typename Hub::const_reference;
+  using size_type = typename Hub::size_type;
+  using difference_type = typename Hub::difference_type;
+  using iterator = typename Hub::iterator;
+  using const_iterator = typename Hub::const_iterator;
+  using reverse_iterator = typename Hub::reverse_iterator;
+  using const_reverse_iterator = typename Hub::const_reverse_iterator;
+
+  avoid_unused_local_typedef<allocator_type>();
+  avoid_unused_local_typedef<pointer>();
+  avoid_unused_local_typedef<const_pointer>();
+  avoid_unused_local_typedef<reference>();
+  avoid_unused_local_typedef<const_reference>();
+  avoid_unused_local_typedef<size_type>();
+  avoid_unused_local_typedef<difference_type>();
+  avoid_unused_local_typedef<reverse_iterator>();
+  avoid_unused_local_typedef<const_reverse_iterator>();
+
+  auto                              rng = make_range<value_type>(200);
+  std::initializer_list<value_type> il{rng[5], rng[1], rng[7]};
+  std::vector<value_type>           zeros(70, value_type());
+  std::vector<value_type>           repeated(100, rng[10]);
+
+  /* construct/copy/destroy */
+
+  {
+    Hub x = noalloc_construct<Hub>(al), y{al};
+    BOOST_TEST(x.empty());
+    BOOST_TEST(y.empty());
+  }
+  {
+    Hub x = noalloc_construct<Hub>(al, zeros.size()),
+        y{zeros.size(), al};
+    test_equal(x, zeros);
+    test_equal(y, zeros);
+  }
+  {
+    Hub x = noalloc_construct<Hub>(al, repeated.size(), repeated.front()),
+        y{repeated.size(), repeated.front(), al};
+    test_equal(x, repeated);
+    test_equal(y, repeated);
+  }
+  {
+    Hub x = noalloc_construct<Hub>(al, repeated.size(), repeated[0]),
+        y{repeated.size(), repeated[0], al};
+    test_equal(x, repeated);
+    test_equal(y, repeated);
+  }
+  {
+    /* [sequence.reqmts/69.1] */
+
+    Hub x = noalloc_construct<Hub>(al, 20, 20);
+    BOOST_TEST_EQ(x.size(), 20);
+  }
+  {
+    Hub x = noalloc_construct<Hub>(al, rng.begin(), rng.end()), 
+        y{rng.begin(), rng.end(), al};
+    test_equal(x, rng);
+    test_equal(y, rng);
+  }
+#if 0
+  {
+    test_range_ctor<Hub>(rng);
+  }
+#endif
+  {
+    const Hub x{rng.begin(), rng.end(), al};
+    Hub       y{x}, z{y, al};
+    test_equal(x, y);
+    test_equal(x, z);
+  }
+  {
+    Hub x{rng.begin(), rng.end(), al};
+    Hub y{std::move(x)};
+    BOOST_TEST(x.empty());
+    test_equal(y, rng);
+
+    Hub z{std::move(y), al};
+    BOOST_TEST(y.empty());
+    test_equal(z, rng);
+  }
+  {
+    Hub x = noalloc_construct<Hub>(al, il), y{il, al};
+    test_equal(x, il);
+    test_equal(y, il);
+  }
+  {
+    Hub  x{rng.begin(), rng.end(), al}, y = noalloc_construct<Hub>(al);
+    Hub& ry = (y = x);
+    BOOST_TEST_EQ(&ry, &y);
+    test_equal(x, y);
+  }
+  {
+    Hub  x{rng.begin(), rng.end(), al}, y = noalloc_construct<Hub>(al);
+    Hub& ry = (y = std::move(x));
+    BOOST_TEST_EQ(&ry, &y);
+    BOOST_TEST(x.empty());
+    test_equal(y, rng);
+  }
+  {
+    Hub  x{al};
+    Hub& rx = (x = il);
+    BOOST_TEST_EQ(&rx, &x);
+    test_equal(x, il);
+  }
+  {
+    Hub x{rng.begin(), rng.begin() + rng.size() / 2, al};
+    puncture(x);
+    x.assign(rng.begin(), rng.end());
+    test_equal(x, rng);
+  }
+#if 0
+  {
+    test_assign_range<Hub>(rng);
+  }
+#endif
+  {
+    Hub x(zeros.size(), al);
+    puncture(x);
+    x.assign(repeated.size(), repeated[0]);
+    test_equal(x, repeated);
+  }
+  {
+    Hub x(zeros.size(), al);
+    puncture(x);
+    x.assign(il);
+    test_equal(x, il);
+  }
+  {
+    const Hub x{al};
+    BOOST_TEST(x.get_allocator() == al);
+  }
+
+  /* iterators */
+
+  {
+    auto       data = rng;
+    Hub        x{data.begin(), data.end(), al};
+    const Hub& cx=x;
+    puncture(data);
+    puncture(x);
+
+    BOOST_TEST(x.rbegin().base() == x.end());
+    BOOST_TEST(cx.rbegin().base() == cx.end());
+    BOOST_TEST(x.rend().base() == x.begin());
+    BOOST_TEST(cx.rend().base() == cx.begin());
+    BOOST_TEST(cx.cbegin() == cx.begin());
+    BOOST_TEST(cx.cend() == cx.end());
+    BOOST_TEST(cx.crbegin() == cx.rbegin());
+    BOOST_TEST(cx.crend() == cx.rend());
+
+    iterator       it = x.begin(), it2 = x.end();
+    const_iterator cit = it;
+    BOOST_TEST(cit == it);
+    cit = it2;
+    BOOST_TEST(cit == it2);
+    it = it2;
+    BOOST_TEST(it == it2);
+
+    test_traversal(x.begin(), x.end(), data);
+    test_traversal(x.cbegin(), x.cend(), data);
+  }
+  {
+    /* operator-> */
+
+    rebind_value_type_t<Hub, std::pair<int, int>> x{al};
+    x.emplace(18, 42);
+    BOOST_TEST_EQ(x.begin()->first, 18);
+    BOOST_TEST_EQ(x.cbegin()->second, 42);
+  }
+
+  /* capacity */
+
+  {
+    Hub        x{al};
+    const Hub& cx = x;
+
+    x.reserve(1000);
+    x.insert(rng.begin(), rng.end());
+    BOOST_TEST(!cx.empty());
+    BOOST_TEST_EQ(cx.size(), rng.size());
+    BOOST_TEST_GT(cx.max_size(), 0u);
+    BOOST_TEST_GE(cx.capacity(), 1000u);
+
+    Hub x2 = x;
+    x.shrink_to_fit();
+    test_equal(x, x2);
+    BOOST_TEST_EQ(cx.size(), rng.size());
+    BOOST_TEST_GE(cx.capacity(), rng.size());
+
+    auto c = cx.capacity();
+    x.reserve(c + 1000);
+    x.trim_capacity(c + 500);
+    BOOST_TEST_LE(cx.capacity(), c + 500);
+    x.trim_capacity();
+    BOOST_TEST_EQ(cx.capacity(), c);
+    test_equal(x, x2);
+  }
+
+  /* modifiers */
+
+  using tracked_hub = rebind_value_type_t<Hub, tracked<value_type>>;
+  using tracked_value_type = tracked<value_type>;
+
+  {
+    tracked_hub     x{al};
+    tracked_value_type v{value_type{}};
+
+    auto it = x.emplace(v.x);
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->origin == from_copy);
+
+    v.x += value_type(1);
+    it = x.emplace(std::move(v.x));
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->origin == from_move);
+
+    v.x += value_type(1);
+    it = x.emplace_hint(x.cbegin(), v);
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->last_op == from_copy);
+
+    v.x += value_type(1);
+    it = x.emplace_hint(x.cbegin(), std::move(v));
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->last_op == from_move);
+
+    v.x += value_type(1);
+    it = x.insert(v);
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->last_op == from_copy);
+
+    v.x += value_type(1);
+    it = x.insert(std::move(v.x));
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->origin == from_move);
+
+    v.x += value_type(1);
+    it = x.insert(x.cbegin(), v);
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->last_op == from_copy);
+
+    v.x += value_type(1);
+    it = x.insert(x.cbegin(), std::move(v.x));
+    BOOST_TEST(it->x == v.x);
+    BOOST_TEST(it->origin == from_move);
+  }
+  {
+    Hub x{al};
+
+    x.insert(il);
+    test_equal(x, il);
+  }
+  {
+    test_insert_range<Hub>(rng);
+  }
+  {
+    Hub x{al};
+
+    x.insert(rng.begin(), rng.begin());
+    BOOST_TEST(x.empty());
+
+    x.insert(rng.begin(), rng.end());
+    test_equal(x, rng);
+  }
+  {
+    Hub x{rng.begin(), rng.end(), al};
+
+    auto it = x.erase(x.cbegin());
+    BOOST_TEST_EQ(x.size(), rng.size() - 1);
+    BOOST_TEST(*it == rng[1]);
+
+    it = x.erase(x.cend(), x.cend());
+    BOOST_TEST_EQ(x.size(), rng.size() - 1);
+    BOOST_TEST(it == x.cend());
+
+    it = x.erase(std::prev(x.cend()), std::prev(x.cend()));
+    BOOST_TEST_EQ(x.size(), rng.size() - 1);
+    BOOST_TEST(it == std::prev(x.cend()));
+
+    it = x.erase(std::next(x.cbegin(), x.size() / 2), x.cend());
+    BOOST_TEST_EQ(x.size(), (rng.size() - 1) / 2);
+    BOOST_TEST(it == x.cend());
+  }
+  {
+    Hub x0{rng.begin(), rng.end(), al}, 
+        y0{rng.begin(), rng.begin() + rng.size() / 2, al},
+        x = x0, y = y0;
+
+    x.swap(x);
+    test_equal(x, x0);
+
+    swap(x, x);
+    test_equal(x, x0);
+
+    x.swap(y);
+    test_equal(x, y0);
+    test_equal(y, x0);
+
+    swap(x, y);
+    test_equal(x, x0);
+    test_equal(y, y0);
+  }
+  {
+    Hub x{rng.begin(), rng.end(), al};
+
+    x.clear();
+    BOOST_TEST(x.empty());
+    x.clear();
+    BOOST_TEST(x.empty());
+  }
+
+  test_global_erase<Hub>(rng, al);
+}
+
+template<template<typename...> class Hub>
+void test_ctad()
+{
+#if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES) && \
+    !BOOST_WORKAROUND(BOOST_CLANG_VERSION, < 90001)
+  std::vector<int> rng({0, 1, 2, 3});
+  Hub              x1({0, 1, 2, 3});
+  Hub              x2({0, 1, 2, 3}, std::allocator<int>{});
+  Hub              x3(rng.begin(), rng.end());
+  Hub              x4(rng.begin(), rng.end(), std::allocator<int>{});
+
+  test_equal(x1, rng);
+  test_equal(x2, rng);
+  test_equal(x3, rng);
+  test_equal(x4, rng);
+
+  test_range_ctad<Hub>(rng);
+#endif
+}
+
+int main()
+{
+  test<boost::hub<int>>();
+  test<boost::hub<std::size_t>>();
+
+  namespace bip = boost::interprocess;
+  using segment_manager = bip::managed_shared_memory::segment_manager;
+  using shared_int_allocator = bip::allocator<int, segment_manager>;
+  using shared_int_hub = boost::hub<int, shared_int_allocator>;
+
+  static auto segment_name = "boost_hub_test_api_shmem_segment";
+  struct segment_remover {
+    segment_remover() { bip::shared_memory_object::remove(segment_name); }
+    ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
+  } remover; (void)remover;
+  bip::managed_shared_memory segment(
+    bip::create_only, segment_name, 64 * 1024);
+
+  test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+
+  test_ctad<boost::hub>();
+
+  return boost::report_errors();
+}
