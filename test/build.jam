@@ -1,0 +1,26 @@
+# Copyright 2025 Joaquín M López Muñoz.
+# Distributed under the Boost Software License, Version 1.0.
+# (See accompanying file LICENSE_1_0.txt or copy at
+# http://www.boost.org/LICENSE_1_0.txt)
+
+require-b2 5.0.1 ;
+import-search /boost/config/checks ;
+
+import testing ;
+import config : requires ;
+
+project
+    : requirements
+      <library>/boost/hub//boost_hub
+      <library>/boost/static_assert//boost_static_assert
+      <library>/boost/config//boost_config
+      <library>/boost/core//boost_core
+      <library>/boost/interprocess//boost_interprocess
+      <library>/boost/smart_ptr//boost_smart_ptr     
+      <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
+    ;
+
+for local src in [ glob *.cpp ]
+{
+  run $(src) /boost/hub//boost_hub ;
+}
