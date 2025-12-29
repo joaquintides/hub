@@ -18,7 +18,7 @@ project
       <library>/boost/smart_ptr//boost_smart_ptr     
       <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
-	  <os>cygwin:<define>_XOPEN_SOURCE=600
+      <target-os>cygwin:<define>_XOPEN_SOURCE=600
     ;
 
 for local src in [ glob *.cpp ]
