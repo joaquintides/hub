@@ -11,10 +11,13 @@
 #include <boost/core/lightweight_test.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <boost/hub.hpp>
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -676,8 +679,11 @@ int main()
     using shared_int_allocator = bip::allocator<int, segment_manager>;
     using shared_int_hub = boost::hub<int, shared_int_allocator>;
 
-    static auto segment_name = "boost_hub_test_api_shmem_segment";
-    struct segment_remover {
+    static auto segment_name_str = 
+      std::string("boost_hub_test_api_shmem_segment") +
+      to_string(boost::uuids::random_generator()());
+    static auto segment_name = segment_name_str.c_str();
+    static struct segment_remover {
       segment_remover() { bip::shared_memory_object::remove(segment_name); }
       ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
     } remover; (void)remover;

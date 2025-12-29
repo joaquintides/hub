@@ -16,6 +16,7 @@ project
       <library>/boost/core//boost_core
       <library>/boost/interprocess//boost_interprocess
       <library>/boost/smart_ptr//boost_smart_ptr     
+      <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
     ;
 
