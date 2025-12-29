@@ -10,7 +10,6 @@ jobs:
   call-boost-ci:
     with:
       branch_coverage: false
-      enable_cmake: false
       enable_pr_coverage: false
     name: Run Boost.CI
     uses: boostorg/boost-ci/.github/workflows/reusable.yml@master
