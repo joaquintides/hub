@@ -496,7 +496,8 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* operator-> */
 
-    rebind_value_type_t<Hub, std::pair<int, int>> x{al};
+    using hub = rebind_value_type_t<Hub, std::pair<int, int>>;
+    hub x{typename hub::allocator_type(al)};
     x.emplace(18, 42);
     BOOST_TEST_EQ(x.begin()->first, 18);
     BOOST_TEST_EQ(x.cbegin()->second, 42);
