@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <boost/config.hpp>
 #include <boost/config/workaround.hpp>
+#include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
@@ -57,11 +58,11 @@ template<
 >
 struct rebind_value_type<Hub<T, Allocator>, U>
 {
-  using type = Hub<
-    U, 
-    typename std::allocator_traits<Allocator>::template rebind_alloc<U>
-  >;
+  using type = Hub<U, boost::allocator_rebind_t<Allocator, U>>;
 };
+
+template<typename Hub, typename U>
+using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
@@ -85,9 +86,6 @@ Hub noalloc_construct(
     std::is_default_constructible<typename Hub::allocator_type>{},
     al, std::forward<Args>(args)...);
 }
-
-template<typename Hub, typename U>
-using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Container>
 void puncture(Container& x)
@@ -496,8 +494,7 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* operator-> */
 
-    using hub = rebind_value_type_t<Hub, std::pair<int, int>>;
-    hub x{typename hub::allocator_type(al)};
+    rebind_value_type_t<Hub, std::pair<int, int>> x{al};
     x.emplace(18, 42);
     BOOST_TEST_EQ(x.begin()->first, 18);
     BOOST_TEST_EQ(x.cbegin()->second, 42);
