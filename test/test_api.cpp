@@ -12,6 +12,7 @@
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/hub.hpp>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <type_traits>
@@ -666,25 +667,31 @@ void test_ctad()
 
 int main()
 {
-  test<boost::hub<int>>();
-  test<boost::hub<std::size_t>>();
+  try {
+    test<boost::hub<int>>();
+    test<boost::hub<std::size_t>>();
 
-  namespace bip = boost::interprocess;
-  using segment_manager = bip::managed_shared_memory::segment_manager;
-  using shared_int_allocator = bip::allocator<int, segment_manager>;
-  using shared_int_hub = boost::hub<int, shared_int_allocator>;
+    namespace bip = boost::interprocess;
+    using segment_manager = bip::managed_shared_memory::segment_manager;
+    using shared_int_allocator = bip::allocator<int, segment_manager>;
+    using shared_int_hub = boost::hub<int, shared_int_allocator>;
 
-  static auto segment_name = "boost_hub_test_api_shmem_segment";
-  struct segment_remover {
-    segment_remover() { bip::shared_memory_object::remove(segment_name); }
-    ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
-  } remover; (void)remover;
-  bip::managed_shared_memory segment(
-    bip::create_only, segment_name, 64 * 1024);
+    static auto segment_name = "boost_hub_test_api_shmem_segment";
+    struct segment_remover {
+      segment_remover() { bip::shared_memory_object::remove(segment_name); }
+      ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
+    } remover; (void)remover;
+    bip::managed_shared_memory segment(
+      bip::create_only, segment_name, 64 * 1024);
 
-  test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+    test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
 
-  test_ctad<boost::hub>();
+    test_ctad<boost::hub>();
 
-  return boost::report_errors();
+    return boost::report_errors();
+  }
+  catch(const std::exception& e) {
+    std::cerr << e.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }
