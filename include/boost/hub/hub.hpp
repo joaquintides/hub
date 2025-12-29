@@ -463,7 +463,7 @@ struct sort_iterator
   friend sort_iterator 
   operator+(difference_type n, const sort_iterator& x) noexcept
   {
-    return {x.pp, n + x.n};
+    return {x.pp, n + x.index};
   }
 
   sort_iterator& operator-=(difference_type n) noexcept
