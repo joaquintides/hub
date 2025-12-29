@@ -12,7 +12,6 @@ import config : requires ;
 project
     : requirements
       <library>/boost/hub//boost_hub
-      <library>/boost/static_assert//boost_static_assert
       <library>/boost/config//boost_config
       <library>/boost/core//boost_core
       <library>/boost/interprocess//boost_interprocess
