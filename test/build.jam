@@ -18,6 +18,7 @@ project
       <library>/boost/smart_ptr//boost_smart_ptr     
       <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
+	  <target-os>cygwin:<define>_XOPEN_SOURCE=600
     ;
 
-run test_api.cpp : : : <target-os>cygwin:<define>_XOPEN_SOURCE=600 ;
+run test_api.cpp ;
