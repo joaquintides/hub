@@ -21,16 +21,14 @@ void test_stability(Hub& x, F f)
   using iterator = typename Hub::iterator;
   using track_vector = std::vector<std::pair<iterator, value_type>>;
   using track_vector_value_type = typename track_vector::value_type;
-  using track_vector_iterator = typename track_vector::iterator;
 
   auto last = x.end();
   track_vector track;
   for(auto it = x.begin(); it != last; ++it) track.emplace_back(it, *it);
   f(erase_callback<iterator>{[&] (iterator it) {
     track.erase(std::find_if(
-      track.begin(), track.end(), [&] (const track_vector_value_type& v) {
-        return v.first == it;
-      }));
+      track.begin(), track.end(),
+      [&] (const track_vector_value_type& v) {  return v.first == it; }));
   }});
   BOOST_TEST(x.end() == last);
   for(const auto& p: track) BOOST_TEST(*p.first == p.second);

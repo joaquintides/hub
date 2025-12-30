@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <boost/assert.hpp>
 #include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/empty_value.hpp>
 #include <boost/core/pointer_traits.hpp>
