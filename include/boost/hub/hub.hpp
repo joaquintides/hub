@@ -827,6 +827,19 @@ public:
 
   void insert(std::initializer_list<T> il) { insert(il.begin(), il.end()); }
 
+#if !defined(BOOST_HUB_NO_RANGES)
+  template<typename R>
+    requires
+      std::ranges::input_range<R> && 
+      std::convertible_to<std::ranges::range_reference_t<R>, T>
+  void insert_range(R&& rg)
+  {
+    range_insert_impl(
+      std::ranges::begin(rg), std::ranges::end(rg),
+      [this] (T* p, auto it) { allocator_construct(al(), p, *it); });
+  }
+#endif
+
   template<
     typename InputIterator,
     typename = detail::enable_if_is_input_iterator_t<InputIterator>

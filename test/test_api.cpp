@@ -203,37 +203,6 @@ void test_range_ctor(const R& rng)
   test_range_ctor_impl<Hub>(from_range_t_or_else{}, rng, 0);
 }
 
-template<
-  typename Hub, typename R,
-  typename = typename std::enable_if<
-    sizeof(
-      std::declval<Hub>().insert_range(
-        std::declval<typename Hub::const_iterator>(),
-        std::declval<const R&>()), 0) != 0
-  >::type
->
-void test_insert_range_impl(const R& rng, int)
-{
-  Hub x;
-  x.insert_range(x.cend(), rng);
-  test_equal(x, rng);
-  x.insert_range(x.cbegin() + 1, rng);
-  x.erase(x.cbegin());
-  x.erase(x.cbegin() + rng.size(), x.cend());
-  test_equal(x, rng);
-}
-
-template<typename Hub, typename R>
-void test_insert_range_impl(const R&, ...)
-{
-}
-
-template<typename Hub, typename R>
-void test_insert_range(const R& rng)
-{
-  test_insert_range_impl<Hub>(rng, 0);
-}
-
 template<typename Hub, typename R>
 void test_global_erase(const R& rng, const typename Hub::allocator_type& al)
 {
@@ -420,7 +389,7 @@ void test(const typename Hub::allocator_type& al = {})
   }
 #if !defined(BOOST_HUB_NO_RANGES)
   {
-    Hub x{al};
+    Hub x(zeros.size(), al);
     x.assign_range(rng);
     test_equal(x, rng);
   }
@@ -562,9 +531,15 @@ void test(const typename Hub::allocator_type& al = {})
     x.insert(il);
     test_equal(x, il);
   }
+#if !defined(BOOST_HUB_NO_RANGES)
   {
-    test_insert_range<Hub>(rng);
+    Hub x{al};
+    x.insert_range(rng);
+    test_equal(x, rng);
+    x.insert_range(rng);
+    BOOST_TEST_EQ(x.size(), 2 * rng.size());
   }
+#endif
   {
     Hub x{al};
 
