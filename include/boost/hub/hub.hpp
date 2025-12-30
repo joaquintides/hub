@@ -544,6 +544,50 @@ struct type_identity { using type = T; };
 template<typename T>
 using type_identity_t = typename type_identity<T>::type;
 
+#if !defined(BOOST_HUB_NO_RANGES)
+template<class R, class T>
+concept container_compatible_range =
+  std::ranges::input_range<R> &&
+  std::convertible_to<std::ranges::range_reference_t<R>, T>;
+
+/* Use own from_range_t only if std::from_range_t does not exist.
+ * Technique explained at
+ https://bannalia.blogspot.com/2016/09/compile-time-checking-existence-of.html
+ */
+
+struct from_range_t{ explicit from_range_t() = default; };
+struct from_range_t_hook{};
+
+} /* namespace detail */
+} /* namespace hubs */
+} /* namespace boost */
+
+namespace std {
+
+template<> struct hash< ::boost::hubs::detail::from_range_t_hook>
+{
+  using from_range_t_type = decltype([] {
+    using namespace ::boost::hubs::detail;
+    return from_range_t{};
+  }());
+
+  /* make standard happy */
+  std::size_t operator()(
+    const ::boost::hubs::detail::from_range_t_hook&) const;
+};
+
+}
+
+namespace boost {
+namespace hubs {
+
+using from_range_t = 
+  typename std::hash<detail::from_range_t_hook>::from_range_t_type;
+inline constexpr from_range_t from_range {};
+
+namespace detail {
+#endif
+
 template<typename InputIterator>
 using enable_if_is_input_iterator_t =
   typename std::enable_if<
@@ -651,6 +695,14 @@ public:
     insert(first, last);
   }
 
+#if !defined(BOOST_HUB_NO_RANGES)
+  template<detail::container_compatible_range<T> R>
+  hub(from_range_t, R&& rg, const Allocator& al_ = Allocator()): hub{al_}
+  {
+    insert_range(std::forward<R>(rg));
+  }
+#endif
+
   hub(const hub& x):
     hub{x, allocator_select_on_container_copy_construction(x.al())} {}
 
@@ -723,10 +775,7 @@ public:
   }
 
 #if !defined(BOOST_HUB_NO_RANGES)
-  template<typename R>
-    requires
-      std::ranges::input_range<R> && 
-      std::convertible_to<std::ranges::range_reference_t<R>, T>
+  template<detail::container_compatible_range<T> R>
   void assign_range(R&& rg)
   {
     range_assign_impl(
@@ -828,10 +877,7 @@ public:
   void insert(std::initializer_list<T> il) { insert(il.begin(), il.end()); }
 
 #if !defined(BOOST_HUB_NO_RANGES)
-  template<typename R>
-    requires
-      std::ranges::input_range<R> && 
-      std::convertible_to<std::ranges::range_reference_t<R>, T>
+  template<detail::container_compatible_range<T> R>
   void insert_range(R&& rg)
   {
     range_insert_impl(
@@ -1344,6 +1390,15 @@ template<
 hub(InputIterator, InputIterator, Allocator = Allocator())
   -> hub<
     typename std::iterator_traits<InputIterator>::value_type, Allocator>;
+
+#if !defined(BOOST_HUB_NO_RANGES)
+template<
+  std::ranges::input_range R,
+  typename Allocator = std::allocator<std::ranges::range_value_t<R>>
+>
+hub(from_range_t, R&&, Allocator = Allocator())
+  -> hub<std::ranges::range_value_t<R>, Allocator>;
+#endif
 #endif
 
 template<typename T, typename Allocator>

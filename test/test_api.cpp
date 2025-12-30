@@ -137,72 +137,6 @@ void test_traversal(Iterator first, Iterator last, const Mirror& data)
   }
 }
 
-#if !defined(BOOST_NO_CXX20_HDR_RANGES)
-
-/* 
- https://bannalia.blogspot.com/2016/09/compile-time-checking-existence-of.html
- */
-
-namespace from_range_t_fallback {
-struct from_range_t{};
-struct hook{};
-}
-
-namespace std {
-template<>
-struct hash< ::from_range_t_fallback::hook>
-{
-  using from_range_t_type = decltype([] {
-    using namespace ::from_range_t_fallback;
-    return from_range_t{};
-  }());
-
-  /* make standard happy */
-
-  std::size_t operator()(const ::from_range_t_fallback::hook&) const 
-  { 
-    return 0; 
-  }
-};
-}
-
-using from_range_t_or_else = 
-  typename std::hash<from_range_t_fallback::hook>::from_range_t_type;
-
-#else
-
-using from_range_t_or_else = void*;
-
-#endif
-
-template<
-  typename Hub, typename FromRangeT, typename R,
-  typename = typename std::enable_if<
-    std::is_constructible<
-      Hub, 
-      FromRangeT, R&&, const typename Hub::allocator_type&
-    >::value
-  >::type
->
-void test_range_ctor_impl(FromRangeT, const R& rng, int)
-{
-  Hub x{FromRangeT{}, rng}, 
-         y{FromRangeT{}, rng, typename Hub::allocator_type{}};
-  test_equal(x, rng);
-  test_equal(y, rng);
-}
-
-template<typename Hub, typename FromRangeT, typename R>
-void test_range_ctor_impl(FromRangeT, const R&, ...)
-{
-}
-
-template<typename Hub, typename R>
-void test_range_ctor(const R& rng)
-{
-  test_range_ctor_impl<Hub>(from_range_t_or_else{}, rng, 0);
-}
-
 template<typename Hub, typename R>
 void test_global_erase(const R& rng, const typename Hub::allocator_type& al)
 {
@@ -231,39 +165,6 @@ void test_global_erase(const R& rng, const typename Hub::allocator_type& al)
     n, (size_type)std::count_if(rng.begin(), rng.end(), even));
   BOOST_TEST_EQ(std::count_if(x.begin(), x.end(), even), 0);
   BOOST_TEST_EQ(x.size(), s - n);
-}
-
-#if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES) && \
-    !defined(BOOST_NO_CXX20_HDR_CONCEPTS)
-template<
-  template<typename...> class Hub, typename FromRangeT, typename R,
-  typename T = std::ranges::range_value_t<R>,
-  typename Allocator = std::allocator<T>,
-  typename = typename std::enable_if<
-    std::is_constructible<
-      Hub<T, Allocator>,
-      FromRangeT, R&&, const Allocator&
-    >::value
-  >::type
->
-void test_range_ctad_impl(FromRangeT, const R& rng, int)
-{
-  Hub x{FromRangeT{}, rng}; 
-  Hub y{FromRangeT{}, rng, Allocator{}};
-  test_equal(x, rng);
-  test_equal(y, rng);
-}
-#endif
-
-template<template<typename...> class Hub, typename FromRangeT, typename R>
-void test_range_ctad_impl(FromRangeT, const R&, ...)
-{
-}
-
-template<template<typename...> class Hub, typename R>
-void test_range_ctad(const R& rng)
-{
-  test_range_ctad_impl<Hub>(from_range_t_or_else{}, rng, 0);
 }
 
 template<typename T> void avoid_unused_local_typedef() {}
@@ -336,9 +237,12 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, rng);
     test_equal(y, rng);
   }
-#if 0
+#if !defined(BOOST_HUB_NO_RANGES)
   {
-    test_range_ctor<Hub>(rng);
+    Hub x = noalloc_construct<Hub>(al, boost::hubs::from_range, rng), 
+        y{boost::hubs::from_range, rng, al};
+    test_equal(x, rng);
+    test_equal(y, rng);
   }
 #endif
   {
@@ -655,18 +559,27 @@ void test_ctad()
 {
 #if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES) && \
     !BOOST_WORKAROUND(BOOST_CLANG_VERSION, < 90001)
-  std::vector<int> rng({0, 1, 2, 3});
-  Hub              x1({0, 1, 2, 3});
-  Hub              x2({0, 1, 2, 3}, std::allocator<int>{});
-  Hub              x3(rng.begin(), rng.end());
-  Hub              x4(rng.begin(), rng.end(), std::allocator<int>{});
+  {
+    std::vector<int> rng({0, 1, 2, 3});
+    Hub              x1({0, 1, 2, 3});
+    Hub              x2({0, 1, 2, 3}, std::allocator<int>{});
+    Hub              x3(rng.begin(), rng.end());
+    Hub              x4(rng.begin(), rng.end(), std::allocator<int>{});
 
-  test_equal(x1, rng);
-  test_equal(x2, rng);
-  test_equal(x3, rng);
-  test_equal(x4, rng);
-
-  test_range_ctad<Hub>(rng);
+    test_equal(x1, rng);
+    test_equal(x2, rng);
+    test_equal(x3, rng);
+    test_equal(x4, rng);
+  }
+#if !defined(BOOST_HUB_NO_RANGES)
+  {
+    std::vector<int> rng({0, 1, 2, 3});
+    Hub x{boost::hubs::from_range, rng}; 
+    Hub y{boost::hubs::from_range, rng, std::allocator<int>{}};
+    test_equal(x, rng);
+    test_equal(y, rng);
+  }
+#endif
 #endif
 }
 
