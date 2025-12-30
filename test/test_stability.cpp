@@ -165,6 +165,13 @@ void test()
   }
   {
     Hub x(rng.begin(), rng.end());
+    BOOST_TEST(check_stability(x, [&] (erase_callback callback) {
+      callback(x.begin());
+      x.erase(x.begin());
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
     BOOST_TEST(check_stability(x, [&] (erase_callback callback) { 
       auto first = std::next(x.begin(), x.size() / 3),
            last = std::next(x.begin(), x.size() * 2 / 3);
@@ -177,6 +184,30 @@ void test()
         y(rng.begin() + rng.size() / 2, rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.swap(y); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.begin() + rng.size() / 2),
+        y(rng.begin() + rng.size() / 2, rng.end());
+    BOOST_TEST(check_stability(x, y, [&] {
+      x.splice(y); 
+    }));
+    BOOST_TEST(check_stability(x, y, [&] {
+      y.splice(std::move(x)); 
+    }));
+  }
+  {
+    Hub x;
+    x.insert(rng.begin(), rng.end());
+    x.insert(rng.begin(), rng.end());
+    x.sort();
+    BOOST_TEST(check_stability(x, [&] (erase_callback callback) {
+      for(auto it = x.begin(); it != x.end(); ) {
+        auto next = std::next(it);
+        while(next != x.end() && *next == *it) callback(next++);
+        it = next;
+      }
+      x.unique(); 
     }));
   }
   {
