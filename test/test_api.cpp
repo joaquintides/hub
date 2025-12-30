@@ -7,12 +7,17 @@
 #include <algorithm>
 #include <boost/config.hpp>
 #include <boost/config/workaround.hpp>
+#include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <boost/hub.hpp>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -57,11 +62,11 @@ template<
 >
 struct rebind_value_type<Hub<T, Allocator>, U>
 {
-  using type = Hub<
-    U, 
-    typename std::allocator_traits<Allocator>::template rebind_alloc<U>
-  >;
+  using type = Hub<U, boost::allocator_rebind_t<Allocator, U>>;
 };
+
+template<typename Hub, typename U>
+using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
@@ -85,9 +90,6 @@ Hub noalloc_construct(
     std::is_default_constructible<typename Hub::allocator_type>{},
     al, std::forward<Args>(args)...);
 }
-
-template<typename Hub, typename U>
-using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Container>
 void puncture(Container& x)
@@ -496,7 +498,7 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* operator-> */
 
-    rebind_value_type_t<Hub, std::pair<int, int>> x{al};
+    rebind_value_type_t<Hub, std::pair<int, int>> x(al);
     x.emplace(18, 42);
     BOOST_TEST_EQ(x.begin()->first, 18);
     BOOST_TEST_EQ(x.cbegin()->second, 42);
@@ -668,25 +670,34 @@ void test_ctad()
 
 int main()
 {
-  test<boost::hub<int>>();
-  test<boost::hub<std::size_t>>();
+  try {
+    test<boost::hub<int>>();
+    test<boost::hub<std::size_t>>();
 
-  namespace bip = boost::interprocess;
-  using segment_manager = bip::managed_shared_memory::segment_manager;
-  using shared_int_allocator = bip::allocator<int, segment_manager>;
-  using shared_int_hub = boost::hub<int, shared_int_allocator>;
+    namespace bip = boost::interprocess;
+    using segment_manager = bip::managed_shared_memory::segment_manager;
+    using shared_int_allocator = bip::allocator<int, segment_manager>;
+    using shared_int_hub = boost::hub<int, shared_int_allocator>;
 
-  static auto segment_name = "boost_hub_test_api_shmem_segment";
-  struct segment_remover {
-    segment_remover() { bip::shared_memory_object::remove(segment_name); }
-    ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
-  } remover; (void)remover;
-  bip::managed_shared_memory segment(
-    bip::create_only, segment_name, 64 * 1024);
+    static auto segment_name_str = 
+      std::string("boost_hub_test_api_shmem_segment") +
+      to_string(boost::uuids::random_generator()());
+    static auto segment_name = segment_name_str.c_str();
+    static struct segment_remover {
+      segment_remover() { bip::shared_memory_object::remove(segment_name); }
+      ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
+    } remover; (void)remover;
+    bip::managed_shared_memory segment(
+      bip::create_only, segment_name, 64 * 1024);
 
-  test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+    test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
 
-  test_ctad<boost::hub>();
+    test_ctad<boost::hub>();
 
-  return boost::report_errors();
+    return boost::report_errors();
+  }
+  catch(const std::exception& e) {
+    std::cerr << e.what() << "\n";
+    return EXIT_FAILURE;
+  }
 }

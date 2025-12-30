@@ -91,7 +91,7 @@ namespace detail {
 
 inline int unchecked_countr_zero(std::uint64_t x)
 {
-#if defined(BOOST_MSVC)
+#if defined(BOOST_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
   unsigned long r;
   _BitScanForward64(&r,x);
   return (int)r;
@@ -110,7 +110,7 @@ inline int unchecked_countr_one(std::uint64_t x)
 
 inline int unchecked_countl_zero(std::uint64_t x)
 {
-#if defined(BOOST_MSVC)
+#if defined(BOOST_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
   unsigned long r;
   _BitScanReverse64(&r,x);
   return (int)(63 - r);
@@ -463,7 +463,7 @@ struct sort_iterator
   friend sort_iterator 
   operator+(difference_type n, const sort_iterator& x) noexcept
   {
-    return {x.pp, n + x.n};
+    return {x.pp, n + x.index};
   }
 
   sort_iterator& operator-=(difference_type n) noexcept
