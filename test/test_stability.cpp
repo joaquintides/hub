@@ -89,6 +89,13 @@ void test()
     });
   }
   {
+    Hub                  x(rng.begin(), rng.end());
+    std::shared_ptr<Hub> py;
+    test_stability(x, [&] (erase_callback) {
+      py = std::make_shared<Hub>(std::move(x));
+    });
+  }
+  {
     Hub x(rng.begin(), rng.begin() + rng.size() / 2),
         y(rng.begin() + rng.size() / 2, rng.end());
     test_stability(x, [&] (erase_callback) {
