@@ -27,6 +27,21 @@
 #include <type_traits>
 #include <utility>
 
+#if defined(BOOST_NO_CXX20_HDR_CONCEPTS) || defined(BOOST_NO_CXX20_HDR_RANGES)
+#define BOOST_HUB_NO_RANGES
+#elif BOOST_WORKAROUND(BOOST_CLANG_VERSION, < 170100) && \
+      defined(BOOST_LIBSTDCXX_VERSION)
+/* https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109647
+ * https://github.com/llvm/llvm-project/issues/49620
+ */
+#define BOOST_HUB_NO_RANGES
+#endif
+
+#if !defined(BOOST_HUB_NO_RANGES)
+#include <concepts>
+#include <ranges>
+#endif
+
 #if !defined(BOOST_HUB_DISABLE_SSE2)
 #if defined(BOOST_HUB_ENABLE_SSE2)|| \
     defined(__SSE2__)|| \
@@ -706,6 +721,20 @@ public:
       [this] (T* p, InputIterator it) { allocator_construct(al(), p, *it); },
       [] (T* p, InputIterator it) { *p = *it; });
   }
+
+#if !defined(BOOST_HUB_NO_RANGES)
+  template<typename R>
+    requires
+      std::ranges::input_range<R> && 
+      std::convertible_to<std::ranges::range_reference_t<R>, T>
+  void assign_range(R&& rg)
+  {
+    range_assign_impl(
+      std::ranges::begin(rg), std::ranges::end(rg),
+      [this] (T* p, auto it) { allocator_construct(al(), p, *it); },
+      [] (T* p, auto it) { *p = *it; });
+  }
+#endif
 
   void assign(size_type n, const T& x)
   {
