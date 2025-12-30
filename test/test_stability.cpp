@@ -8,7 +8,9 @@
 #include <boost/core/lightweight_test.hpp>
 #include <boost/hub.hpp>
 #include <functional>
+#include <iterator>
 #include <memory>
+#include <type_traits>
 #include <vector>
 #include "utility.hpp"
 
@@ -28,15 +30,15 @@ struct tidy_int
   int n;
 };
 
-template<typename Iterator>
-using erase_callback = std::function<void(Iterator)>;
+template<typename Hub>
+using erase_callback = std::function<void(typename Hub::iterator)>;
 
-template<typename Iterator>
+template<typename Hub>
 struct track_info
 {
-  Iterator                      it;
-  typename Iterator::pointer    pointer;
-  typename Iterator::value_type value;
+  typename Hub::iterator   it;
+  typename Hub::pointer    pointer;
+  typename Hub::value_type value;
 
   bool valid() const
   {
@@ -44,26 +46,66 @@ struct track_info
   }
 };
 
-template<typename Hub, typename F>
-void test_stability(Hub& x, F f)
-{
-  using value_type = typename Hub::value_type;
-  using iterator = typename Hub::iterator;
-  using track_info = ::track_info<iterator>;
-  using track_vector = std::vector<track_info>;
+template<typename Hub>
+using track_info_vector = std::vector<track_info<Hub>>;
 
-  auto last = x.end();
-  track_vector track;
-  for(auto it = x.begin(); it != last; ++it) {
-    track.push_back(track_info{it, std::addressof(*it), *it});
+template<typename F, typename Arg>
+void call_optionally_with_impl(F& f, Arg, ...) { f(); }
+
+template<
+  typename F, typename Arg,
+  typename = typename std::enable_if<
+    sizeof(std::declval<F&>()(std::declval<Arg>()), 0)
+  >::type
+>
+void call_optionally_with_impl(F& f, Arg arg, int) { f(arg); }
+
+template<typename F, typename Arg>
+void call_optionally_with(F& f, Arg arg) 
+{
+  call_optionally_with_impl(f, arg, 0); 
+}
+
+template<typename Hub>
+void save_track_info(Hub& x, track_info_vector<Hub>& track)
+{
+  for(auto it = x.begin(); it != x.end(); ++it) {
+    track.push_back(track_info<Hub>{it, std::addressof(*it), *it});
   }
-  f(erase_callback<iterator>{[&] (iterator it) {
-    track.erase(std::find_if(
-      track.begin(), track.end(),
-      [&] (const track_info& info) {  return info.it == it; }));
-  }});
-  BOOST_TEST(x.end() == last);
-  for(const auto& info: track) BOOST_TEST(info.valid());
+}
+
+template<typename Hub, typename F>
+bool check_stability(F f, track_info_vector<Hub>&& track = {})
+{
+  using iterator = typename Hub::iterator;
+
+  call_optionally_with(
+    f,
+    erase_callback<iterator>{[&] (iterator it) {
+      track.erase(std::find_if(
+        track.begin(), track.end(),
+        [&] (const track_info<Hub>& info) { return info.it == it; }));
+    }});
+  for(const auto& info: track) if(!info.valid()) return false;
+  return true;
+}
+
+template<typename Hub, typename F>
+bool check_stability(Hub& x, F f, track_info_vector<Hub>&& track = {})
+{
+  auto last = x.end();
+  save_track_info(x, track);
+  if(!check_stability<Hub>(f, std::move(track))) return false;
+  return (x.end() == last);
+}
+
+template<typename Hub, typename F>
+bool check_stability(Hub& x, Hub& y, F f, track_info_vector<Hub>&& track = {})
+{
+  auto last = x.end();
+  save_track_info(x, track);
+  if(!check_stability<Hub>(y, f, std::move(track))) return false;
+  return (x.end() == last);
 }
 
 template<typename Hub>
@@ -77,32 +119,65 @@ void test()
 
   {
     Hub x(rng.begin(), rng.end());
-    test_stability(x, [&] (erase_callback callback) {
+    BOOST_TEST(check_stability(x, [&] (erase_callback callback) {
       puncture(x, callback);
-    });
-  }
-  {
-    Hub x(rng.begin(), rng.end());
-    puncture(x);
-    test_stability(x, [&] (erase_callback callback) {
       x.insert(rng.begin(), rng.end());
-    });
+    }));
   }
   {
     Hub                  x(rng.begin(), rng.end());
     std::shared_ptr<Hub> py;
-    test_stability(x, [&] (erase_callback) {
-      py = std::make_shared<Hub>(std::move(x));
-    });
+    BOOST_TEST(check_stability(x, [&] { 
+      py = std::make_shared<Hub>(std::move(x)); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end()), y;
+    BOOST_TEST(check_stability(x, y, [&] { 
+      y = std::move(x); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
+    BOOST_TEST(check_stability(x, [&] { 
+      x.reserve(x.capacity() + 100); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
+    puncture(x);
+    x.shrink_to_fit(); 
+    BOOST_TEST(check_stability(x, [&] { 
+      x.shrink_to_fit(); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
+    puncture(x);
+    auto c = x.capacity();
+    x.reserve(c + 1000);
+    BOOST_TEST(check_stability(x, [&] { 
+      x.trim_capacity(c+500); 
+    }));
+    BOOST_TEST(check_stability(x, [&] { 
+      x.trim_capacity(); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
+    BOOST_TEST(check_stability(x, [&] (erase_callback callback) { 
+      auto first = std::next(x.begin(), x.size() / 3),
+           last = std::next(x.begin(), x.size() * 2 / 3);
+      for(auto it = first; it != last; ++it) callback(it);
+      x.erase(first,last);
+    }));
   }
   {
     Hub x(rng.begin(), rng.begin() + rng.size() / 2),
         y(rng.begin() + rng.size() / 2, rng.end());
-    test_stability(x, [&] (erase_callback) {
-      test_stability(y, [&] (erase_callback) {
-        x.swap(y);
-      });
-    });
+    BOOST_TEST(check_stability(x, y, [&] {
+      x.swap(y); 
+    }));
   }
 }
 
