@@ -10,11 +10,12 @@
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/core/pointer_traits.hpp>
+#include <boost/hub.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
-#include <boost/hub.hpp>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <type_traits>
@@ -194,6 +195,11 @@ void test(const typename Hub::allocator_type& al = {})
   avoid_unused_local_typedef<difference_type>();
   avoid_unused_local_typedef<reverse_iterator>();
   avoid_unused_local_typedef<const_reverse_iterator>();
+
+#if !defined(BOOST_NO_CXX20_HDR_CONCEPTS)
+  static_assert(std::bidirectional_iterator<iterator>);
+  static_assert(std::bidirectional_iterator<const_iterator>);
+#endif
 
   auto                              rng = make_range<value_type>(200);
   std::initializer_list<value_type> il{rng[5], rng[1], rng[7]};
