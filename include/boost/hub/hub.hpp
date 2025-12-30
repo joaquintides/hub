@@ -18,8 +18,8 @@
 #include <boost/core/bit.hpp>
 #include <boost/hub/hub_fwd.hpp>
 #include <boost/smart_ptr/allocate_unique.hpp>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <iterator>

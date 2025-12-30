@@ -21,6 +21,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include "utility.hpp"
 
 enum tracked_provenance { ab_ovo = 0, from_copy, from_move };
 
@@ -89,27 +90,6 @@ Hub noalloc_construct(
   return noalloc_construct<Hub>(
     std::is_default_constructible<typename Hub::allocator_type>{},
     al, std::forward<Args>(args)...);
-}
-
-template<typename Container>
-void puncture(Container& x)
-{
-  for(auto first = x.begin(); first != x.end(); ) {
-    if(!(*first % 7)) first = x.erase(first);
-    else ++first;
-  }
-}
-
-template<typename T>
-std::vector<T> make_range(std::size_t n)
-{
-  std::vector<T> res;
-  T i = T();
-  while(n--) {
-    res.push_back(i);
-    i += T(1);
-  }
-  return res;
 }
 
 template<typename Container1, typename Container2>
