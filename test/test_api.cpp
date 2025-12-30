@@ -9,14 +9,13 @@
 #include <boost/config/workaround.hpp>
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
+#include <boost/core/pointer_traits.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/hub.hpp>
-#include <cstdlib>
 #include <memory>
-#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -534,8 +533,8 @@ void test(const typename Hub::allocator_type& al = {})
 
   /* modifiers */
 
-  using tracked_hub = rebind_value_type_t<Hub, tracked<value_type>>;
   using tracked_value_type = tracked<value_type>;
+  using tracked_hub = rebind_value_type_t<Hub, tracked_value_type>;
 
   {
     tracked_hub     x{al};
@@ -645,6 +644,57 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST(x.empty());
   }
 
+  /* hive operations */
+
+  {
+    Hub x{rng.begin(), rng.end(), al}, y{x};
+    
+    auto it = y.begin();
+    y.reserve(y.capacity() + 100);
+    x.splice(y);
+    BOOST_TEST_EQ(x.size(), 2 * rng.size());
+    BOOST_TEST(y.empty());
+    BOOST_TEST_GE(y.capacity(), 100);
+    BOOST_TEST(*it == rng[0]);
+
+    y.splice(std::move(x));
+    BOOST_TEST(x.empty());
+    BOOST_TEST_EQ(y.size(), 2 * rng.size());
+    BOOST_TEST(*it == rng[0]);
+  }
+  {
+    Hub x{al};
+    for(const auto& v: rng) {
+      x.insert(v);
+      x.insert(v);
+    }
+
+    auto s = x.unique(std::equal_to<value_type>{});
+    BOOST_TEST_EQ(s, rng.size());
+    BOOST_TEST_EQ(x.size(), rng.size());
+  }
+  {
+    Hub x{al};
+    x.insert(rng.begin(), rng.end());
+    x.insert(rng.begin(), rng.end());
+
+    x.sort(std::less<value_type>{});
+    BOOST_TEST(std::is_sorted(x.begin(), x.end()));
+
+    x.sort(std::greater<value_type>{});
+    BOOST_TEST(std::is_sorted(x.rbegin(), x.rend()));
+  }
+  {
+    Hub        x{rng.begin(), rng.end(), al}, y{x};
+    const Hub& cx=x;
+
+    for(auto it = x.cbegin(); it != x.cend(); ++it) {
+      auto p = boost::pointer_traits<const_pointer>::pointer_to(*it);
+      BOOST_TEST(x.get_iterator(p) == it);
+      BOOST_TEST(cx.get_iterator(p) == it);
+    }
+  }
+
   test_global_erase<Hub>(rng, al);
 }
 
@@ -670,34 +720,28 @@ void test_ctad()
 
 int main()
 {
-  try {
-    test<boost::hub<int>>();
-    test<boost::hub<std::size_t>>();
+  test<boost::hub<int>>();
+  test<boost::hub<std::size_t>>();
 
-    namespace bip = boost::interprocess;
-    using segment_manager = bip::managed_shared_memory::segment_manager;
-    using shared_int_allocator = bip::allocator<int, segment_manager>;
-    using shared_int_hub = boost::hub<int, shared_int_allocator>;
+  namespace bip = boost::interprocess;
+  using segment_manager = bip::managed_shared_memory::segment_manager;
+  using shared_int_allocator = bip::allocator<int, segment_manager>;
+  using shared_int_hub = boost::hub<int, shared_int_allocator>;
 
-    static auto segment_name_str = 
-      std::string("boost_hub_test_api_shmem_segment") +
-      to_string(boost::uuids::random_generator()());
-    static auto segment_name = segment_name_str.c_str();
-    static struct segment_remover {
-      segment_remover() { bip::shared_memory_object::remove(segment_name); }
-      ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
-    } remover; (void)remover;
-    bip::managed_shared_memory segment(
-      bip::create_only, segment_name, 64 * 1024);
+  static auto segment_name_str = 
+    std::string("boost_hub_test_api_shmem_segment") +
+    to_string(boost::uuids::random_generator()());
+  static auto segment_name = segment_name_str.c_str();
+  static struct segment_remover {
+    segment_remover() { bip::shared_memory_object::remove(segment_name); }
+    ~segment_remover() { bip::shared_memory_object::remove(segment_name); }
+  } remover; (void)remover;
+  bip::managed_shared_memory segment(
+    bip::create_only, segment_name, 64 * 1024);
 
-    test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+  test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
 
-    test_ctad<boost::hub>();
+  test_ctad<boost::hub>();
 
-    return boost::report_errors();
-  }
-  catch(const std::exception& e) {
-    std::cerr << e.what() << "\n";
-    return EXIT_FAILURE;
-  }
+  return boost::report_errors();
 }
