@@ -55,7 +55,7 @@ void call_optionally_with_impl(F& f, Arg, ...) { f(); }
 template<
   typename F, typename Arg,
   typename = typename std::enable_if<
-    sizeof(std::declval<F&>()(std::declval<Arg>()), 0)
+    sizeof(std::declval<F&>()(std::declval<Arg>()), 0) != 0
   >::type
 >
 void call_optionally_with_impl(F& f, Arg arg, int) { f(arg); }
@@ -177,6 +177,16 @@ void test()
         y(rng.begin() + rng.size() / 2, rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.swap(y); 
+    }));
+  }
+  {
+    Hub x(rng.begin(), rng.end());
+    auto is_even = [] (const value_type& v) { return v % 2 == 0; };
+    BOOST_TEST(check_stability(x, [&] (erase_callback callback) {
+      for(auto it = x.begin(); it != x.end(); ++it) {
+        if(is_even(*it)) callback(it);
+      }
+      erase_if(x, is_even);
     }));
   }
 }
