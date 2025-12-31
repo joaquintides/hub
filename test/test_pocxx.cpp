@@ -1,0 +1,143 @@
+/* Copyright 2025 Joaquin M Lopez Munoz.
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+ */
+
+#include <boost/core/allocator_access.hpp>
+#include <boost/core/lightweight_test.hpp>
+#include <boost/hub.hpp>
+#include <memory>
+#include <type_traits>
+#include "utility.hpp"
+
+template<typename Hub, typename OtherAllocator>
+struct rebind_allocator;
+
+template<
+  template<typename...> class Hub, typename T, typename Allocator,
+  typename OtherAllocator
+>
+struct rebind_allocator<Hub<T, Allocator>, OtherAllocator>
+{
+  using type = Hub<T, boost::allocator_rebind_t<OtherAllocator, T>>;
+};
+
+template<typename Hub, typename OtherAllocator>
+using rebind_allocator_t = 
+  typename rebind_allocator<Hub, OtherAllocator>::type;
+
+template<typename T, typename Propagate, typename AlwaysEqual>
+struct stateful_allocator
+{
+  using value_type = T;
+  using propagate_on_container_copy_assignment = Propagate;
+  using propagate_on_container_move_assignment = Propagate;
+  using propagate_on_container_swap = Propagate;
+  using is_always_equal = AlwaysEqual;
+
+  stateful_allocator(int state_ = 0): state{state_} {}
+
+  template<typename U>
+  stateful_allocator(const stateful_allocator<U,Propagate,AlwaysEqual>& x):
+    state{x.state}, num_allocations{x.num_allocations} {}
+
+  T* allocate(std::size_t n)
+  {
+    auto p = static_cast<T*>(::operator new(n * sizeof(T)));
+    ++num_allocations;
+    return p;
+  }
+
+  void deallocate(T* p, std::size_t) { ::operator delete(p); }
+
+  bool operator==(const stateful_allocator& x) const
+  {
+    return AlwaysEqual::value || (state == x.state);
+  }
+
+  bool operator!=(const stateful_allocator& x) const { return !(*this == x); }
+
+  int state;
+  int num_allocations = 0;
+};
+
+template<typename Hub, typename Propagate, typename AlwaysEqual>
+void test()
+{
+  using hub = rebind_allocator_t<
+    Hub, stateful_allocator<void, Propagate,AlwaysEqual>>;
+  using value_type = typename hub::value_type;
+  using allocator_type = typename hub::allocator_type;
+  static constexpr auto pocca =
+    boost::allocator_propagate_on_container_copy_assignment_t<
+      allocator_type>::value;
+  static constexpr auto pocma =
+    boost::allocator_propagate_on_container_move_assignment_t<
+      allocator_type>::value;
+  static constexpr auto pocs =
+    boost::allocator_propagate_on_container_swap_t<allocator_type>::value;
+
+  auto           rng = make_range<value_type>(200),
+                 long_rng = make_range<value_type>(400);
+  allocator_type al0{0}, al1{1};
+
+  {
+    hub  x(long_rng.begin(), long_rng.end(), al0),
+         y(rng.begin(), rng.end(), al1);
+    auto nx = x.get_allocator().num_allocations,
+         ny = y.get_allocator().num_allocations;
+
+    x = y;
+    BOOST_TEST(x.get_allocator().state == (pocca? al1: al0).state);
+    auto nx1 = x.get_allocator().num_allocations;
+    BOOST_TEST(
+      pocca && al0 == al1? nx1 == ny: 
+      pocca && al0 != al1? nx1 >  ny : 
+      /* !pocca */         nx1 == nx);
+  }
+  {
+    hub  x(rng.begin(), rng.end(), al0),
+         y(long_rng.begin(), long_rng.end(), al1);
+    auto nx = x.get_allocator().num_allocations,
+         ny = y.get_allocator().num_allocations;
+
+    x = std::move(y);
+    BOOST_TEST(x.get_allocator().state == (pocma? al1: al0).state);
+    auto nx1 = x.get_allocator().num_allocations;
+    BOOST_TEST(
+      !pocma && al0 == al1? nx1 == nx:
+      !pocma && al0 != al1? nx1 >  nx:
+      /* pocma */           nx1 == ny);
+  }
+  if(pocs || al0 == al1) {
+    hub  x(rng.begin(), rng.end(), al0),
+         y(long_rng.begin(), long_rng.end(), al1);
+    auto nx = x.get_allocator().num_allocations,
+         ny = y.get_allocator().num_allocations;
+
+    x.swap(y);
+    BOOST_TEST(x.get_allocator().state == (pocs? al1: al0).state);
+    BOOST_TEST(y.get_allocator().state == (pocs? al0: al1).state);
+    auto nx1 = x.get_allocator().num_allocations;
+    auto ny1 = y.get_allocator().num_allocations;
+    BOOST_TEST(pocs? nx1 == ny: nx1 == nx);
+    BOOST_TEST(pocs? ny1 == nx: ny1 == ny);
+  }
+}
+
+template<typename Hub>
+void test()
+{
+  test<Hub, std::false_type, std::false_type>();
+  test<Hub, std::false_type, std::true_type >();
+  test<Hub, std::true_type,  std::false_type>();
+  test<Hub, std::true_type,  std::true_type >();
+}
+
+int main()
+{
+  test<boost::hub<int>>();
+
+  return boost::report_errors();
+}

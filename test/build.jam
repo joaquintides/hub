@@ -22,4 +22,5 @@ project
     ;
 
 run test_api.cpp ;
+run test_pocxx.cpp ;
 run test_stability.cpp ;
