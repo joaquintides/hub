@@ -496,7 +496,7 @@ void test(const typename Hub::allocator_type& al = {})
     x.splice(y);
     BOOST_TEST_EQ(x.size(), 2 * rng.size());
     BOOST_TEST(y.empty());
-    BOOST_TEST_GE(y.capacity(), 100);
+    BOOST_TEST_GE(y.capacity(), 100u);
     BOOST_TEST(*it == rng[0]);
 
     y.splice(std::move(x));

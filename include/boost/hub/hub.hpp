@@ -14,9 +14,9 @@
 #include <boost/config.hpp>
 #include <boost/config/workaround.hpp>
 #include <boost/core/allocator_access.hpp>
+#include <boost/core/bit.hpp>
 #include <boost/core/empty_value.hpp>
 #include <boost/core/pointer_traits.hpp>
-#include <boost/core/bit.hpp>
 #include <boost/hub/hub_fwd.hpp>
 #include <boost/smart_ptr/allocate_unique.hpp>
 #include <cstddef>
