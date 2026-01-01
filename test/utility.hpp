@@ -54,6 +54,12 @@ struct stateful_allocator
   using propagate_on_container_swap = Propagate;
   using is_always_equal = AlwaysEqual;
 
+  template<typename U>
+  struct rebind
+  {
+    using other = stateful_allocator<U, Propagate, AlwaysEqual>;
+  };
+
   stateful_allocator(int state_ = 0): state{state_} {}
 
   template<typename U>
