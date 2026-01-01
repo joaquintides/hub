@@ -42,6 +42,9 @@ void puncture(Container& x, EraseCallback callback = EraseCallback())
   }
 }
 
+template<typename T> struct reference_or_void { using type = T&; };
+template<> struct reference_or_void<void> { using type = void; };
+
 template<
   typename T, 
   typename Propagate = std::false_type, typename AlwaysEqual = std::false_type
@@ -52,8 +55,8 @@ struct stateful_allocator
   using pointer = T*;
   using const_pointer = const T*;
   using void_pointer = void*;
-  using reference = T&;
-  using const_reference = const T&;
+  using reference = typename reference_or_void<T>::type;
+  using const_reference = typename reference_or_void<const T>::type;
   using const_void_pointer = const void*;
   using difference_type = std::ptrdiff_t;
   using size_type = std::size_t;
