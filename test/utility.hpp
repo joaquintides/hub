@@ -44,6 +44,7 @@ void puncture(Container& x, EraseCallback callback = EraseCallback())
 
 template<typename T> struct reference_or_void { using type = T&; };
 template<> struct reference_or_void<void> { using type = void; };
+template<> struct reference_or_void<const void> { using type = const void; };
 
 template<
   typename T, 
