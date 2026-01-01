@@ -52,6 +52,8 @@ struct stateful_allocator
   using pointer = T*;
   using const_pointer = const T*;
   using void_pointer = void*;
+  using reference = T&;
+  using const_reference = const T&;
   using const_void_pointer = const void*;
   using difference_type = std::ptrdiff_t;
   using size_type = std::size_t;
