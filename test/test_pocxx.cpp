@@ -1,4 +1,4 @@
-/* Copyright 2025 Joaquin M Lopez Munoz.
+/* Copyright 2025-2026 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -7,7 +7,6 @@
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/hub.hpp>
-#include <memory>
 #include <type_traits>
 #include "utility.hpp"
 
@@ -26,41 +25,6 @@ struct rebind_allocator<Hub<T, Allocator>, OtherAllocator>
 template<typename Hub, typename OtherAllocator>
 using rebind_allocator_t = 
   typename rebind_allocator<Hub, OtherAllocator>::type;
-
-template<typename T, typename Propagate, typename AlwaysEqual>
-struct stateful_allocator
-{
-  using value_type = T;
-  using propagate_on_container_copy_assignment = Propagate;
-  using propagate_on_container_move_assignment = Propagate;
-  using propagate_on_container_swap = Propagate;
-  using is_always_equal = AlwaysEqual;
-
-  stateful_allocator(int state_ = 0): state{state_} {}
-
-  template<typename U>
-  stateful_allocator(const stateful_allocator<U,Propagate,AlwaysEqual>& x):
-    state{x.state}, num_allocations{x.num_allocations} {}
-
-  T* allocate(std::size_t n)
-  {
-    auto p = static_cast<T*>(::operator new(n * sizeof(T)));
-    ++num_allocations;
-    return p;
-  }
-
-  void deallocate(T* p, std::size_t) { ::operator delete(p); }
-
-  bool operator==(const stateful_allocator& x) const
-  {
-    return AlwaysEqual::value || (state == x.state);
-  }
-
-  bool operator!=(const stateful_allocator& x) const { return !(*this == x); }
-
-  int state;
-  int num_allocations = 0;
-};
 
 template<typename Hub, typename Propagate, typename AlwaysEqual>
 void test()
