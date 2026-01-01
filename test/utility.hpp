@@ -49,6 +49,12 @@ template<
 struct stateful_allocator
 {
   using value_type = T;
+  using pointer = T*;
+  using const_pointer = const T*;
+  using void_pointer = void*;
+  using const_void_pointer = const void*;
+  using difference_type = std::ptrdiff_t;
+  using size_type = std::size_t;
   using propagate_on_container_copy_assignment = Propagate;
   using propagate_on_container_move_assignment = Propagate;
   using propagate_on_container_swap = Propagate;
