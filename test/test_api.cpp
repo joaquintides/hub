@@ -1,4 +1,4 @@
-/* Copyright 2025 Joaquin M Lopez Munoz.
+/* Copyright 2025-2026 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -591,6 +591,10 @@ int main()
     bip::create_only, segment_name, 64 * 1024);
 
   test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+
+#if !defined(BOOST_NO_CXX17_HDR_MEMORY_RESOURCE)
+  test<boost::hubs::pmr::hub<int>>();
+#endif
 
   test_ctad<boost::hub>();
 
