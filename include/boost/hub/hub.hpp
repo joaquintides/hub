@@ -27,6 +27,7 @@
 #include <memory>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #if defined(BOOST_NO_CXX20_HDR_CONCEPTS) || defined(BOOST_NO_CXX20_HDR_RANGES)
 #define BOOST_HUB_NO_RANGES
@@ -241,10 +242,28 @@ struct block_base
     prev->next = pointer_to(*this);
   }
 
+  inline void link_after(pointer p) noexcept
+  {
+    next = p->next;
+    prev = p;
+    next->prev = pointer_to(*this);
+    prev->next = pointer_to(*this);
+  }
+
   inline void unlink() noexcept
   {
     prev->next = next;
     next->prev = prev;
+  }
+
+  inline void swap(pointer p) noexcept
+  {
+    auto this_prev = prev;
+    auto p_next = p->next;
+    unlink();
+    p->unlink();
+    link_before(p_next);
+    p->link_after(this_prev);
   }
 
   pointer   prev_available,
@@ -1016,6 +1035,68 @@ public:
     }
   }
 
+  template<typename Compare = std::less<T>>
+  void sort2(Compare comp = Compare())
+  {
+    struct proxy
+    {
+      T*        p;
+      size_type n;
+    };
+
+    if(size_ > 1) {
+      auto p = allocate_unique_noinit<proxy[]>(al(), size_);
+      size_type i = 0;
+      visit_all([&] (value_type& x) {
+        p[i] = {std::addressof(x), i};
+        ++i;
+      });
+      std::sort(&p[0], &p[0] + size_, [&] (const proxy& x, const proxy& y) { 
+        return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
+      });
+      i = 0;
+      for(; i < size_; ++i) {
+        if(p[i].n != i) {
+          value_type x = std::move(*(p[i].p));
+          auto       j = i;
+          do {
+            auto k = p[j].n;
+            *(p[j].p) = std::move(*p[k].p);
+            p[j].n = j;
+            j = k;
+          } while(p[j].n != i);
+          *(p[j].p) = std::move(x);
+          p[j].n = j;
+        }
+      }
+    }
+  }
+
+  template<typename Compare = std::less<T>>
+  void sort3(Compare comp = Compare())
+  {
+    std::vector<T, Allocator> v(al());
+    v.reserve(size_);
+    visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
+    std::sort(v.begin(), v.end(), comp);
+    size_type i = 0;
+    visit_all([&] (value_type& x) { x = std::move(v[i++]); });
+  }
+
+  template<typename Compare = std::less<T>>
+  void sort4(Compare comp = Compare())
+  {
+    std::vector<T, Allocator> v(al());
+    v.reserve(size_);
+    erase_if(*this, [&] (const value_type& x) { 
+      v.push_back(std::move(const_cast<value_type&>(x)));
+      return true;
+    });
+    std::sort(v.begin(), v.end(), comp);
+    insert(
+      std::make_move_iterator(v.begin()), std::make_move_iterator(v.end()));
+  }
+
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
   {   
     std::less<const T*> less;
@@ -1354,26 +1435,78 @@ private:
   void compact(Track track)
   {
     if(size_) {
-      auto last = --end();
-      auto pbb = header.next;
-      for(;  ; ) {
-        auto pb = static_cast_block_pointer(pbb);
-        pbb = pbb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, T);
-        track(pb);
-        if(pb->mask != full) {
-          do{
-            auto n = detail::unchecked_countr_one(pb->mask);
-            if(pb == last.pbb && n > last.n) return;
-            allocator_construct(al(), pb->data() + n, std::move(*last));
-            pb->mask |= pb->mask + 1;
-            ++size_;
-            erase(last--); /* decreases size_ */
-          }while(pb->mask != full);
-          unlink_available(pb);
+      auto pbbx = header.next;
+      auto pbby = header.prev;
+      for(; pbbx != header.prev  ; pbbx = pbbx->next) {
+        BOOST_HUB_PREFETCH_BLOCK(pbbx->next, T);
+        if(pbbx->mask != full) {
+          do {
+            while(pbby->mask == full) pbby = pbby->prev;
+            BOOST_HUB_PREFETCH_BLOCK(pbby->prev, T);
+            if(BOOST_LIKELY(pbbx != pbby)) {
+              /* transfer elements from less populated block to most */
+              auto cx = core::popcount(pbbx->mask),
+                   cy = core::popcount(pbby->mask);
+              if(cx < cy) {
+                pbbx->swap(pbby);
+                std::swap(pbbx, pbby);
+                std::swap(cx, cy);
+              }
+              auto pbx = static_cast_block_pointer(pbbx),
+                   pby = static_cast_block_pointer(pbby);
+              compact(pbx, cx, pby, cy);
+              if(pby->mask == 0) {
+                pbby = pby->prev;
+                unlink(pby);
+              }
+            }
+            else{ 
+              /* one non-full block standing, move to back and fast-track */
+              auto pbx = static_cast_block_pointer(pbbx);
+              pbbx = pbx->prev;
+              unlink(pbx);
+              link_at_back(pbx);
+              while((pbbx = pbbx->next) != header.prev) {
+                track(static_cast_block_pointer(pbbx));
+              }
+              goto exit;
+            }
+          } while(pbbx->mask != full);
+          unlink_available(static_cast_block_pointer(pbbx));
         }
-        else if(pb == last.pbb) return;
+        track(static_cast_block_pointer(pbbx));
       }
+    exit:
+      /* last block */
+      auto pbx = static_cast_block_pointer(pbbx);
+      track(pbx);
+      if(pbx->mask != full) compact(pbx);
+    }
+  }
+
+  void compact(block_pointer pbx, int cx, block_pointer pby, int cy)
+  {
+    auto c = (std::min)(N - cx, cy);
+    while(c--) {
+      auto n = detail::unchecked_countr_one(pbx->mask);
+      auto m = N - 1 - detail::unchecked_countl_zero(pby->mask);
+      allocator_construct(al(), pbx->data() + n, std::move(pby->data()[m]));
+      allocator_destroy(al(), pby->data() + m);
+      pbx->mask |= pbx->mask + 1;
+      pby->mask &= ~((mask_type)(1) << m);
+    }
+  }
+
+  void compact(block_pointer pb)
+  {
+    for(; ;) {
+      auto n = detail::unchecked_countr_one(pb->mask);
+      auto m = N - 1 - detail::unchecked_countl_zero(pb->mask);
+      if(n > m) return;
+      allocator_construct(al(), pb->data() + n, std::move(pb->data()[m]));
+      allocator_destroy(al(), pb->data() + m);
+      pb->mask |= pb->mask + 1;
+      pb->mask &= ~((mask_type)(1) << m);
     }
   }
 
