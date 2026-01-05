@@ -1,6 +1,6 @@
 /* Hub container.
  * 
- * Copyright 2025 Joaquin M Lopez Munoz.
+ * Copyright 2025-2026 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
@@ -917,6 +917,18 @@ public:
     pb->mask &= ~bit;
     --size_;
     return {pos.pbb, pos.n};
+  }
+
+  void erase_void(const_iterator pos)
+  {
+    auto pb = static_cast_block_pointer(pos.pbb);
+    auto n = pos.n;
+    allocator_destroy(al(), pb->data() + n);
+    auto bit = (mask_type)(1) << n;
+    if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
+    else if(BOOST_UNLIKELY(pb->mask == bit)) unlink(pb);
+    pb->mask &= ~bit;
+    --size_;
   }
 
   iterator erase(const_iterator first, const_iterator last)
