@@ -99,6 +99,11 @@ do{                                                                \
   for(; p0 < p1; p0 += cache_line) BOOST_HUB_PREFETCH(p0);         \
 } while(0)
 
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4714) /* marked as __forceinline not inlined */
+#endif
+
 namespace boost {
 
 namespace hubs {
@@ -202,7 +207,7 @@ struct block_base
     return *this;
   }
 
-  inline void reset() noexcept
+  BOOST_FORCEINLINE void reset() noexcept
   {
     prev_available = pointer_to(*this);
     next_available = pointer_to(*this);
@@ -211,7 +216,7 @@ struct block_base
     mask = 1; /* sentinel */
   }
 
-  inline void link_available_before(pointer p) noexcept
+  BOOST_FORCEINLINE void link_available_before(pointer p) noexcept
   {
     next_available = p;
     prev_available = p->prev_available;
@@ -219,7 +224,7 @@ struct block_base
     prev_available->next_available = pointer_to(*this);
   }
 
-  inline void link_available_after(pointer p) noexcept
+  BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
   {
     next_available = p->next_available;
     prev_available = p;
@@ -227,13 +232,13 @@ struct block_base
     prev_available->next_available = pointer_to(*this);
   }
 
-  inline void unlink_available() noexcept
+  BOOST_FORCEINLINE void unlink_available() noexcept
   {
     prev_available->next_available = next_available;
     next_available->prev_available = prev_available;
   }
 
-  inline void link_before(pointer p) noexcept
+  BOOST_FORCEINLINE void link_before(pointer p) noexcept
   {
     next = p;
     prev = p->prev;
@@ -241,7 +246,7 @@ struct block_base
     prev->next = pointer_to(*this);
   }
 
-  inline void unlink() noexcept
+  BOOST_FORCEINLINE void unlink() noexcept
   {
     prev->next = next;
     next->prev = prev;
@@ -327,7 +332,7 @@ public:
     return *operator->();
   }
 
-  iterator& operator++() noexcept
+  BOOST_FORCEINLINE iterator& operator++() noexcept
   {
     auto mask = (pbb->mask >> n) - 1;
     if(BOOST_LIKELY(mask != 0)) {
@@ -341,14 +346,14 @@ public:
     return *this;
   }
 
-  iterator operator++(int) noexcept
+  BOOST_FORCEINLINE iterator operator++(int) noexcept
   {
     iterator tmp(*this);
     this->operator++();
     return tmp;
   }
 
-  iterator& operator--() noexcept
+  BOOST_FORCEINLINE iterator& operator--() noexcept
   {
     auto mask = (pbb->mask << (N - 1 - n)) - ((mask_type)1 << (N - 1));
     if(BOOST_LIKELY(mask != 0)) {
@@ -362,7 +367,7 @@ public:
     return *this;
   }
 
-  iterator operator--(int) noexcept
+  BOOST_FORCEINLINE iterator operator--(int) noexcept
   {
     iterator tmp(*this);
     this->operator--();
@@ -851,7 +856,7 @@ public:
   }
 
   template<typename... Args>
-  iterator emplace(Args&&... args)
+  BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
     int  n;
     auto pb = retrieve_available_block(n);
@@ -865,15 +870,17 @@ public:
   }
 
   template<typename... Args>
-  iterator emplace_hint(const_iterator, Args&&... args)
+  BOOST_FORCEINLINE iterator emplace_hint(const_iterator, Args&&... args)
   {
     return emplace(std::forward<Args>(args)...);
   }
 
-  iterator insert(const T& x) { return emplace(x); }
-  iterator insert(const_iterator, const T& x) { return emplace(x); }
-  iterator insert(T&& x) { return emplace(std::move(x)); }
-  iterator insert(const_iterator, T&& x) { return emplace(std::move(x)); }
+  BOOST_FORCEINLINE iterator insert(const T& x) { return emplace(x); }
+  BOOST_FORCEINLINE iterator insert(const_iterator, const T& x)
+                             { return emplace(x); }
+  BOOST_FORCEINLINE iterator insert(T&& x) { return emplace(std::move(x)); }
+  BOOST_FORCEINLINE iterator insert(const_iterator, T&& x) 
+                             { return emplace(std::move(x)); }
 
   void insert(std::initializer_list<T> il) { insert(il.begin(), il.end()); }
 
@@ -905,7 +912,7 @@ public:
     });
   }
 
-  iterator erase(const_iterator pos)
+  BOOST_FORCEINLINE iterator erase(const_iterator pos)
   {
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
@@ -919,7 +926,7 @@ public:
     return {pos.pbb, pos.n};
   }
 
-  void erase_void(const_iterator pos)
+  BOOST_FORCEINLINE void erase_void(const_iterator pos)
   {
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
@@ -1221,18 +1228,32 @@ private:
     return pointer_traits<block_pointer>::pointer_to(static_cast<block&>(*x));
   }
 
-  void        link_at_back(block_pointer pb) noexcept 
-              { pb->link_before(pointer_to_header()); }
-  static void unlink(block_pointer pb) noexcept
-              { pb->unlink(); }
-  void        link_available_at_back(block_pointer pb) noexcept 
-              { pb->link_available_before(pointer_to_header()); }
-  void        link_available_at_front(block_pointer pb) noexcept 
-              { pb->link_available_after(pointer_to_header()); }
-  static void unlink_available(block_pointer pb) noexcept
-              { pb->unlink_available(); }
+  BOOST_FORCEINLINE void link_at_back(block_pointer pb) noexcept 
+  {
+    pb->link_before(pointer_to_header());
+  }
 
-  block_pointer create_new_block()
+  BOOST_FORCEINLINE static void unlink(block_pointer pb) noexcept
+  {
+    pb->unlink();
+  }
+
+  BOOST_FORCEINLINE void link_available_at_back(block_pointer pb) noexcept 
+  {
+    pb->link_available_before(pointer_to_header());
+  }
+
+  BOOST_FORCEINLINE void link_available_at_front(block_pointer pb) noexcept 
+  {
+    pb->link_available_after(pointer_to_header());
+  }
+
+  BOOST_FORCEINLINE static void unlink_available(block_pointer pb) noexcept
+  {
+    pb->unlink_available();
+  }
+
+  BOOST_FORCEINLINE block_pointer create_new_block()
   {
     auto pb = allocator_allocate(al(), 1);
     link_available_at_back(pb);
@@ -1241,7 +1262,7 @@ private:
     return pb;
   }
 
-  block_pointer retrieve_available_block(int& n)
+  BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
     if(header.next_available != pointer_to_header()){
       auto pb = static_cast_block_pointer(header.next_available);
@@ -1447,5 +1468,9 @@ erase(hub<T, Allocator>& x, const U& value)
 } /* namespace hubs */
 
 } /* namespace boost */
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4714 */
+#endif
 
 #endif
