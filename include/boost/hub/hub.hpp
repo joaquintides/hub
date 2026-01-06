@@ -171,12 +171,7 @@ struct block_base
 
   block_base(block_base&& x) noexcept: block_base{}
   {
-    if(x.prev_available != pointer_to(x)) {
-      prev_available = x.prev_available;
-      next_available = x.next_available;
-      next_available->prev_available = pointer_to(*this);
-      prev_available->next_available = pointer_to(*this);
-    }
+    next_available = x.next_available;
     if(x.prev != pointer_to(x)) {
       prev = x.prev;
       next = x.next;
@@ -190,12 +185,7 @@ struct block_base
   block_base& operator=(block_base&& x) noexcept
   {
     reset();
-    if(x.prev_available != pointer_to(x)) {
-      prev_available = x.prev_available;
-      next_available = x.next_available;
-      next_available->prev_available = pointer_to(*this);
-      prev_available->next_available = pointer_to(*this);
-    }
+    next_available = x.next_available;
     if(x.prev != pointer_to(x)) {
       prev = x.prev;
       next = x.next;
@@ -209,33 +199,21 @@ struct block_base
 
   void reset() noexcept
   {
-    prev_available = pointer_to(*this);
-    next_available = pointer_to(*this);
+    next_available = nullptr;
     prev = pointer_to(*this);
     next = pointer_to(*this);
     mask = 1; /* sentinel */
   }
 
-  BOOST_FORCEINLINE void link_available_before(pointer p) noexcept
-  {
-    next_available = p;
-    prev_available = p->prev_available;
-    next_available->prev_available = pointer_to(*this);
-    prev_available->next_available = pointer_to(*this);
-  }
-
   BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
   {
     next_available = p->next_available;
-    prev_available = p;
-    next_available->prev_available = pointer_to(*this);
-    prev_available->next_available = pointer_to(*this);
+    p->next_available = pointer_to(*this);
   }
 
-  BOOST_FORCEINLINE void unlink_available() noexcept
+  BOOST_FORCEINLINE void unlink_available_after(pointer p) noexcept
   {
-    prev_available->next_available = next_available;
-    next_available->prev_available = prev_available;
+    p->next_available = next_available;
   }
 
   BOOST_FORCEINLINE void link_before(pointer p) noexcept
@@ -252,8 +230,7 @@ struct block_base
     next->prev = prev;
   }
 
-  pointer   prev_available,
-            next_available,
+  pointer   next_available,
             prev,
             next;
   mask_type mask;
@@ -267,7 +244,7 @@ void calculate_block_prefetch(
 
   p0 = reinterpret_cast<char*>(to_address(pbb));
   p1 = p0 + sizeof(block_base) + sizeof(T);
-  p0 += 3 * sizeof(typename block_base::pointer); /* offset to next */
+  p0 += 2 * sizeof(typename block_base::pointer); /* offset to next */
 }
 
 template<typename ValuePointer>
@@ -843,14 +820,17 @@ public:
     /* Linear on # available blocks, std::hive is linear on # _reserved_
      * blocks.
      */
-    for(auto pbb = header.next_available; 
-        capacity() > n && pbb != pointer_to_header(); ) {
+    for(auto pbb_prev = pointer_to_header(), pbb = pbb_prev->next_available;
+        capacity() > n && pbb != nullptr; ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
-         unlink_available(pb);
+         unlink_available_after(pb, pbb_prev);
          allocator_deallocate(al(), pb, 1);
          --num_blocks;
+      }
+      else {
+        pbb_prev = pb;
       }
     }
   }
@@ -984,6 +964,7 @@ public:
 
   void splice(hub& x)
   {
+    // TODO: incorrect as it breaks unlink_available(pb) invariant
     BOOST_ASSERT(this != &x);
     BOOST_ASSERT(al() == x.al());
     for(auto pbb = x.header.next; pbb != x.pointer_to_header(); ) {
@@ -1073,10 +1054,11 @@ public:
   }
 
   template<typename F>
-  bool visit_while(iterator first, iterator last, F f)
+  iterator visit_while(iterator first, iterator last, F f)
   {
     for(auto pbb = first.pbb; first != last; ) {
-      if(!f(*first++)) return false;
+      if(!f(*first)) return first;
+      ++first;
       if(first.pbb != pbb) break;
     }
     auto pbb = first.pbb;
@@ -1088,22 +1070,24 @@ public:
         auto mask = pb->mask;
         do {
           auto n = detail::unchecked_countr_zero(mask);
-          if(!f(pb->data()[n])) return false;
+          if(!f(pb->data()[n])) return {pbb, n};
           mask &= mask - 1;
         } while(mask);
       } while(pbb != last.pbb);
       first = {pbb};
     }
-    while(first != last) if(!f(*first++)) return false;
-    return true;
+    for(; first != last; ++first) if(!f(*first)) return first;
+    return first;
   }
 
   template<typename F>
-  bool visit_while(const_iterator first, const_iterator last, F f) const
+  const_iterator visit_while(
+    const_iterator first, const_iterator last, F f) const
   {
-    return const_cast<hub*>(this)->visit_while(
+    auto it =const_cast<hub*>(this)->visit_while(
       iterator{first.pbb, first.n}, iterator{last.pbb, last.n},
       [&] (const value_type& x) { return f(x); });
+    return {it.pbb, it.n};
   }
 
   template<typename F>
@@ -1119,13 +1103,13 @@ public:
   }
 
   template<typename F>
-  bool visit_all_while(F f) 
+  iterator visit_all_while(F f) 
   {
     return visit_while(begin(), end(), std::ref(f)); 
   }
 
   template<typename F>
-  void visit_all_while(F f) const
+  const_iterator visit_all_while(F f) const
   {
     return visit_while(begin(), end(), std::ref(f)); 
   }
@@ -1157,9 +1141,13 @@ private:
 
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept: 
-    allocator_base{empty_init, al_}, header{std::move(x.header)}, 
+    allocator_base{empty_init, al_}, header{std::move(x.header)},
+    last_available{
+      x.last_available != x.pointer_to_header()?
+        pointer_to_header(): x.last_available}, 
     num_blocks{x.num_blocks}, size_{x.size_}
   {
+    x.last_available = x.pointer_to_header();
     x.num_blocks = 0;
     x.size_ = 0;
   }
@@ -1170,6 +1158,8 @@ private:
   {
     if(al() == x.al()) {
       header = std::move(x.header);
+      last_available = x.last_available != x.pointer_to_header()?
+        pointer_to_header(): x.last_available;
       num_blocks = x.num_blocks;
       size_ = x.size_;
       x.num_blocks = 0;
@@ -1240,17 +1230,28 @@ private:
 
   BOOST_FORCEINLINE void link_available_at_back(block_pointer pb) noexcept 
   {
-    pb->link_available_before(pointer_to_header());
+    pb->link_available_after(last_available);
+    last_available = pb;
   }
 
   BOOST_FORCEINLINE void link_available_at_front(block_pointer pb) noexcept 
   {
+    if(last_available == pointer_to_header()) last_available = pb;
     pb->link_available_after(pointer_to_header());
   }
 
-  BOOST_FORCEINLINE static void unlink_available(block_pointer pb) noexcept
+  BOOST_FORCEINLINE void unlink_available(block_pointer pb) noexcept
   {
-    pb->unlink_available();
+    BOOST_ASSERT(header.next_available == pb);
+    pb->unlink_available_after(pointer_to_header());
+    if(last_available == pb) last_available = pointer_to_header();
+  }
+
+  BOOST_FORCEINLINE void unlink_available_after(
+    block_pointer pb, block_base_pointer pbb_prev) noexcept
+  {
+    pb->unlink_available_after(pbb_prev);
+    if(last_available == pb) last_available = pointer_to_header();
   }
 
   BOOST_FORCEINLINE block_pointer create_new_block()
@@ -1264,7 +1265,7 @@ private:
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
-    if(header.next_available != pointer_to_header()){
+    if(header.next_available != nullptr){
       auto pb = static_cast_block_pointer(header.next_available);
       n = detail::unchecked_countr_one(pb->mask);
       return pb;
@@ -1303,21 +1304,27 @@ private:
 
   void reset() noexcept
   {
+    for(auto pbb = header.next_available; pbb != nullptr; ) {
+      auto pb = static_cast_block_pointer(pbb);
+      pbb = pb->next_available;
+      BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+      if(pb->mask != 0) {
+        destroy_all_in_nonempty_block(pb);
+        unlink(pb);
+      }
+      unlink_available(pb);
+      allocator_deallocate(al(), pb, 1);
+    }
+    /* full blocks remaining */
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
-      destroy_all_in_nonempty_block(pb);
-      if(pb->mask != full) unlink_available(pb);
-      allocator_deallocate(al(), pb, 1);
-    }
-    /* empty blocks remaining */
-    for(auto pbb = header.next_available; pbb != pointer_to_header(); ) {
-      auto pb = static_cast_block_pointer(pbb);
-      pbb = pb->next_available;
+      destroy_all_in_nonempty_block(pb); // TODO: destroy_all_in_full_block
       allocator_deallocate(al(), pb, 1);
     }
     header.reset();
+    last_available = pointer_to_header();
     num_blocks = 0;
     size_ = 0;
   }
@@ -1351,6 +1358,7 @@ private:
   void range_assign_impl(
     Incrementable first, Sentinel last, Construct construct, Insert insert)
   {
+    // TODO: incorrect as it breaks unlink_available(pb) invariant
     auto pbb = header.next;
     int  n = 0;
     if(first != last) {
@@ -1386,6 +1394,7 @@ private:
   template<typename Track>
   void compact(Track track)
   {
+     // TODO: implement
     if(size_) {
       auto last = --end();
       auto pbb = header.next;
@@ -1410,9 +1419,10 @@ private:
     }
   }
 
-  block_base      header;
-  size_type       num_blocks = 0;
-  size_type       size_ = 0;
+  block_base          header;
+  block_base_pointer  last_available = pointer_to_header();
+  size_type           num_blocks = 0;
+  size_type           size_ = 0;
 };
 
 #if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES)
