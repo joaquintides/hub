@@ -207,7 +207,7 @@ struct block_base
     return *this;
   }
 
-  BOOST_FORCEINLINE void reset() noexcept
+  void reset() noexcept
   {
     prev_available = pointer_to(*this);
     next_available = pointer_to(*this);
@@ -1271,11 +1271,7 @@ private:
     }
     else {
       n = 0;
-      auto pb = create_new_block();
-      create_new_block();
-      create_new_block();
-      create_new_block();
-      return pb;
+      return create_new_block();
     }
   }
 
