@@ -1271,6 +1271,9 @@ private:
     }
     else {
       n = 0;
+             create_new_block();
+             create_new_block();
+             create_new_block();
       return create_new_block();
     }
   }
