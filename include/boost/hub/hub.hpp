@@ -964,23 +964,39 @@ public:
 
   void splice(hub& x)
   {
-    // TODO: incorrect as it breaks unlink_available(pb) invariant
     BOOST_ASSERT(this != &x);
     BOOST_ASSERT(al() == x.al());
+    /* non-full blocks */
+    for(auto pbb_prev = x.pointer_to_header(), pbb = pbb_prev->next_available;
+        pbb != nullptr; ) {
+      auto pb = static_cast_block_pointer(pbb);
+      pbb = pbb-> next_available;
+      if(pb->mask != 0) {
+        unlink_available_after(pb, pbb_prev); /* from x */
+        link_available_at_front(pb);
+        unlink(pb); /* from x */
+        link_at_back(pb);
+        --x.num_blocks;
+        ++num_blocks;
+        auto s = core::popcount(pb->mask);
+        x.size_ -= s;
+        size_ += s;
+      }
+      else {
+        pbb_prev = pb;
+      }
+    }
+    /* full blocks remaining */
     for(auto pbb = x.header.next; pbb != x.pointer_to_header(); ) {
+      BOOST_ASSERT(pbb->mask == full);
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next;
-      if(pb->mask != full){
-        unlink_available(pb); /* from x */
-        link_available_at_front(pb);
-      }
       unlink(pb); /* from x */
       link_at_back(pb);
       --x.num_blocks;
       ++num_blocks;
-      auto s = core::popcount(pb->mask);
-      x.size_ -= s;
-      size_ += s;
+      x.size_ -= N;
+      size_ += N;
     }
   }
 
@@ -1278,6 +1294,7 @@ private:
 
   size_type destroy_all_in_nonempty_block(block_pointer pb) noexcept
   {
+    BOOST_ASSERT(pb->mask != 0);
     return destroy_all_in_nonempty_block(
       pb, std::is_trivially_destructible<T>{});
   }
@@ -1302,6 +1319,13 @@ private:
     return s;
   }
 
+  size_type destroy_all_in_full_block(block_pointer pb) noexcept
+  {
+    BOOST_ASSERT(pb->mask == full);
+    for(int n = 0; n < N; ++n) allocator_destroy(al(), pb->data() + n);
+    return (size_type)N;
+  }
+
   void reset() noexcept
   {
     for(auto pbb = header.next_available; pbb != nullptr; ) {
@@ -1317,10 +1341,11 @@ private:
     }
     /* full blocks remaining */
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
+      BOOST_ASSERT(pbb->mask == full);
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
-      destroy_all_in_nonempty_block(pb); // TODO: destroy_all_in_full_block
+      destroy_all_in_full_block(pb);
       allocator_deallocate(al(), pb, 1);
     }
     header.reset();
