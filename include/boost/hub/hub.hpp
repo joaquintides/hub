@@ -827,7 +827,6 @@ public:
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
          unlink_available_after(pb, pbb_prev);
-         //allocator_deallocate(al(), pb, 1);
          deallocate_block(pb);
          --num_blocks;
       }
@@ -1272,9 +1271,9 @@ private:
     if(last_available == pb) last_available = pointer_to_header();
   }
 
-  BOOST_FORCEINLINE block_pointer create_new_block()
+  block_pointer create_new_block()
   {
-    char n = 4;
+    char n = 64;
     auto pb0 = allocator_allocate(al(), n);
     auto pb = pb0;
     for(char i = 0; i < n ; ++i, ++pb){
@@ -1357,7 +1356,6 @@ private:
         unlink(pb);
       }
       unlink_available(pb);
-      //allocator_deallocate(al(), pb, 1);
       deallocate_block(pb);
     }
     /* full blocks remaining */
@@ -1367,7 +1365,6 @@ private:
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
       destroy_all_in_full_block(pb);
-      //allocator_deallocate(al(), pb, 1);
       deallocate_block(pb);
     }
     header.reset();
