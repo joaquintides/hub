@@ -230,6 +230,7 @@ struct block_base
     next->prev = prev;
   }
 
+  char      live, index, n;
   pointer   next_available,
             prev,
             next;
@@ -826,7 +827,8 @@ public:
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
          unlink_available_after(pb, pbb_prev);
-         allocator_deallocate(al(), pb, 1);
+         //allocator_deallocate(al(), pb, 1);
+         deallocate_block(pb);
          --num_blocks;
       }
       else {
@@ -1272,11 +1274,29 @@ private:
 
   BOOST_FORCEINLINE block_pointer create_new_block()
   {
-    auto pb = allocator_allocate(al(), 1);
-    link_available_at_back(pb);
-    pb->mask = 0;
-    ++num_blocks;
-    return pb;
+    char n = 4;
+    auto pb0 = allocator_allocate(al(), n);
+    auto pb = pb0;
+    for(char i = 0; i < n ; ++i, ++pb){
+      pb->live = true;
+      pb->index = i;
+      pb->n = n;
+      link_available_at_back(pb);
+      pb->mask = 0;
+      ++num_blocks;
+    }
+    return pb0;
+  }
+
+  BOOST_FORCEINLINE void deallocate_block(block_pointer pb) 
+  {
+    pb->live = false;
+    auto pb0 = pb - pb->index;
+    pb = pb0;
+    for(char i = 0; i < pb0->n; ++i, ++pb) {
+      if(pb->live) return;
+    }
+    allocator_deallocate(al(), pb0, pb0->n);
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
@@ -1337,7 +1357,8 @@ private:
         unlink(pb);
       }
       unlink_available(pb);
-      allocator_deallocate(al(), pb, 1);
+      //allocator_deallocate(al(), pb, 1);
+      deallocate_block(pb);
     }
     /* full blocks remaining */
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
@@ -1346,7 +1367,8 @@ private:
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
       destroy_all_in_full_block(pb);
-      allocator_deallocate(al(), pb, 1);
+      //allocator_deallocate(al(), pb, 1);
+      deallocate_block(pb);
     }
     header.reset();
     last_available = pointer_to_header();
