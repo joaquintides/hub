@@ -153,6 +153,7 @@ struct block_base
   using pointer = pointer_rebind_t<VoidPointer, block_base>;
   using const_pointer = pointer_rebind_t<VoidPointer, const block_base>;
   using mask_type = std::uint64_t;
+  using mask_pointer = pointer_rebind_t<VoidPointer, mask_type>;
 
   static constexpr int N = 64;
   static constexpr mask_type full = (mask_type)(-1);
@@ -183,7 +184,9 @@ struct block_base
       next->prev = pointer_to(*this);
       prev->next = pointer_to(*this);
     }
-    mask = x.mask;
+    full_block_mask = x.full_block_mask;
+    block_mask = x.block_mask;
+    masks = x.masks;
     x.reset();
   }
 
@@ -202,7 +205,9 @@ struct block_base
       next->prev = pointer_to(*this);
       prev->next = pointer_to(*this);
     }
-    mask = x.mask;
+    full_block_mask = x.full_block_mask;
+    block_mask = x.block_mask;
+    masks = x.masks;
     x.reset();
     return *this;
   }
@@ -213,7 +218,9 @@ struct block_base
     next_available = pointer_to(*this);
     prev = pointer_to(*this);
     next = pointer_to(*this);
-    mask = 1; /* sentinel */
+    full_block_mask = 0; /* irrelevant */
+    block_mask = 1; /* sentinel */
+    masks = &dummy_mask;
   }
 
   BOOST_FORCEINLINE void link_available_before(pointer p) noexcept
@@ -252,11 +259,16 @@ struct block_base
     next->prev = prev;
   }
 
-  pointer   prev_available,
-            next_available,
-            prev,
-            next;
-  mask_type mask;
+  pointer      prev_available,
+               next_available,
+               prev,
+               next;
+  mask_type    full_block_mask;
+  mask_type    block_mask;
+  mask_pointer masks;
+
+  // TODO: implement properly
+  inline static mask_type dummy_mask = (mask_type)1; /* sentinel */
 };
 
 template<typename T,typename BlockBasePointer>
@@ -273,12 +285,9 @@ void calculate_block_prefetch(
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
-  using super = block_base<pointer_rebind_t<ValuePointer, void>>;
-  using value_type = typename pointer_traits<ValuePointer>::element_type;
+  ValuePointer data() noexcept { return data_; }
 
-  value_type* data() noexcept { return reinterpret_cast<value_type*>(data_); }
-
-  alignas(value_type) unsigned char data_[sizeof(value_type) * super::N];
+  ValuePointer data_;
 };
 
 template<typename ValuePointer>
@@ -334,14 +343,23 @@ public:
 
   BOOST_FORCEINLINE iterator& operator++() noexcept
   {
-    auto mask = (pbb->mask >> n) - 1;
+    auto mask = (pbb->masks[n / N] >> (n % N)) - 1;
     if(BOOST_LIKELY(mask != 0)) {
       n += detail::unchecked_countr_zero(mask);
     }
     else {
-      pbb = pbb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, value_type);
-      n = detail::unchecked_countr_zero(pbb->mask);
+      n = n / N * N;
+      auto block_mask = (pbb->block_mask >> (n / N)) - 1;
+      if(BOOST_LIKELY(block_mask != 0)) {
+        n += detail::unchecked_countr_zero(block_mask) * N;
+        n += detail::unchecked_countr_zero(pbb->masks[n / N]);
+      }
+      else{
+        pbb = pbb->next;
+        BOOST_HUB_PREFETCH_BLOCK(pbb->next, value_type);
+        n = detail::unchecked_countr_zero(pbb->block_mask) * N;
+        n += detail::unchecked_countr_zero(pbb->masks[n / N]);
+      }
     }
     return *this;
   }
@@ -355,14 +373,25 @@ public:
 
   BOOST_FORCEINLINE iterator& operator--() noexcept
   {
-    auto mask = (pbb->mask << (N - 1 - n)) - ((mask_type)1 << (N - 1));
+    auto mask = 
+      (pbb->masks[n / N] << (N - 1 - (n % N))) - ((mask_type)1 << (N - 1));
     if(BOOST_LIKELY(mask != 0)) {
       n -= detail::unchecked_countl_zero(mask);
     }
     else {
-      pbb = pbb->prev;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->prev, value_type);
-      n = N - 1 - detail::unchecked_countl_zero(pbb->mask);
+      n = n / N * N;
+      auto block_mask = 
+        (pbb->block_mask << (N - 1 - (n / N))) - ((mask_type)1 << (N - 1));
+      if(BOOST_LIKELY(block_mask != 0)) {
+        n -= detail::unchecked_countl_zero(block_mask) * N;
+        n -= detail::unchecked_countl_zero(pbb->masks[n / N]);
+      }
+      else{
+        pbb = pbb->prev;
+        BOOST_HUB_PREFETCH_BLOCK(pbb->prev, value_type);
+        n = (N - 1 - detail::unchecked_countl_zero(pbb->mask)) * N;
+        n -= detail::unchecked_countl_zero(pbb->masks[n / N]);
+      }
     }
     return *this;
   }
@@ -402,9 +431,11 @@ private:
     pbb{const_cast_block_base_pointer(pbb_)}, n{n_} {}
 
   iterator(const_block_base_pointer pbb_) noexcept:
-    pbb{const_cast_block_base_pointer(pbb_)}, 
-    n{detail::unchecked_countr_zero(pbb->mask)} 
-  {}
+    pbb{const_cast_block_base_pointer(pbb_)} 
+  {
+    n = detail::unchecked_countr_zero(pbb->block_mask) * N;
+    n += detail::unchecked_countr_zero(pbb->masks[n / N]);
+  }
 
   static block_base_pointer
   const_cast_block_base_pointer(const_block_base_pointer pbb_) noexcept
@@ -847,9 +878,9 @@ public:
         capacity() > n && pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
-      if(pb->mask == 0) {
+      if(pb->block_mask == 0) {
          unlink_available(pb);
-         allocator_deallocate(al(), pb, 1);
+         delete_block(pb);
          --num_blocks;
       }
     }
@@ -861,10 +892,17 @@ public:
     int  n;
     auto pb = retrieve_available_block(n);
     allocator_construct(
-      al(), pb->data() + n, std::forward<Args>(args)...);
-    pb->mask |= pb->mask + 1;
-    if(BOOST_UNLIKELY(pb->mask == 1)) link_at_back(pb);
-    else if(BOOST_UNLIKELY(pb->mask == full)) unlink_available(pb);
+      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    auto& mask = pb->masks[n / N];
+    mask |= mask + 1;
+    if(BOOST_UNLIKELY(mask == 1)) {
+      if(BOOST_UNLIKELY(pb->block_mask == 0)) link_at_back(pb);
+      pb->block_mask |= (mask_type)(1) << (n / N); // TODO: pb->block_mask |= pb->block_mask +1 would work ??
+    }      
+    else if(BOOST_UNLIKELY(mask == full)) {
+      pb->full_block_mask |= pb->full_block_mask +1;
+      if(BOOST_UNLIKELY(pb->full_block_mask == full)) unlink_available(pb);
+    }
     ++size_;
     return {pb, n};
   }
@@ -917,11 +955,16 @@ public:
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
     ++pos;
-    allocator_destroy(al(), pb->data() + n);
-    auto bit = (mask_type)(1) << n;
-    if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
-    else if(BOOST_UNLIKELY(pb->mask == bit)) unlink(pb);
-    pb->mask &= ~bit;
+    allocator_destroy(al(), boost::to_address(pb->data() + n));
+    if(BOOST_UNLIKELY(pb->full_block_mask == full)) link_available_at_front(pb);
+    pb->full_block_mask &= ~((mask_type)(1) << (n / N));
+    if(BOOST_UNLIKELY(
+      (pb->masks[n / N] &= ~((mask_type)(1) << (n % N))) == 0)) {
+      if(BOOST_UNLIKELY(
+        (pb->block_mask &= ~((mask_type)(1) << (n / N))) == 0)) {
+        unlink(pb);
+      }
+    }
     --size_;
     return {pos.pbb, pos.n};
   }
@@ -931,10 +974,15 @@ public:
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
     allocator_destroy(al(), pb->data() + n);
-    auto bit = (mask_type)(1) << n;
-    if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
-    else if(BOOST_UNLIKELY(pb->mask == bit)) unlink(pb);
-    pb->mask &= ~bit;
+    if(BOOST_UNLIKELY(pb->full_block_mask == full)) link_available_at_front(pb);
+    pb->full_block_mask &= ~((mask_type)(1) << (n / N));
+    if(BOOST_UNLIKELY(
+      (pb->masks[n / N] &= ~((mask_type)(1) << (n % N))) == 0)) {
+      if(BOOST_UNLIKELY(
+        (pb->block_mask &= ~((mask_type)(1) << (n / N))) == 0)) {
+        unlink(pb);
+      }
+    }
     --size_;
   }
 
@@ -952,8 +1000,8 @@ public:
         BOOST_HUB_PREFETCH_BLOCK(pbb, T);
         size_ -= destroy_all_in_nonempty_block(pb);
         unlink(pb);
-        if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
-        pb->mask = 0;
+        if(BOOST_UNLIKELY(pb->block_mask == full)) link_available_at_front(pb);
+        pb->block_mask = 0;
       } while(pbb != last.pbb);
       first = {pbb};
     }
@@ -989,7 +1037,7 @@ public:
     for(auto pbb = x.header.next; pbb != x.pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next;
-      if(pb->mask != full){
+      if(pb->block_mask != full){
         unlink_available(pb); /* from x */
         link_available_at_front(pb);
       }
@@ -997,10 +1045,9 @@ public:
       link_at_back(pb);
       --x.num_blocks;
       ++num_blocks;
-      auto s = core::popcount(pb->mask);
-      x.size_ -= s;
-      size_ += s;
     }
+    size_ += x.size_;
+    x.size_ = 0;
   }
 
   void splice(hub&& x) { splice(x); }
@@ -1041,8 +1088,8 @@ public:
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next;
-      if(!less(boost::to_address(p), pb->data()) &&
-          less(boost::to_address(p), pb->data() + N)) {
+      if(!less(boost::to_address(p), boost::to_address(pb->data())) &&
+          less(boost::to_address(p), boost::to_address(pb->data() + N * N))) {
         return {pb, (int)(p - pb->data())};
       }
     }
@@ -1253,20 +1300,39 @@ private:
     pb->unlink_available();
   }
 
-  BOOST_FORCEINLINE block_pointer create_new_block()
+  block_pointer create_new_block()
   {
     auto pb = allocator_allocate(al(), 1);
+
+    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
+    pb->masks = allocator_allocate(mal, N);
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    pb->data_ = allocator_allocate(val, N * N);
+
     link_available_at_back(pb);
-    pb->mask = 0;
+    pb->full_block_mask = 0;
+    pb->block_mask = 0;
+    std::memset(boost::to_address(pb->masks), 0, sizeof(mask_type) * N);
+
     ++num_blocks;
     return pb;
+  }
+
+  void delete_block(block_pointer pb) noexcept
+  {
+    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
+    allocator_deallocate(mal, pb->masks, N);
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    allocator_deallocate(val, pb->data_, N * N);
+    allocator_deallocate(al(), pb, 1);
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
     if(header.next_available != pointer_to_header()){
       auto pb = static_cast_block_pointer(header.next_available);
-      n = detail::unchecked_countr_one(pb->mask);
+      n = detail::unchecked_countr_one(pb->full_block_mask) * N;
+      n += detail::unchecked_countr_one(pb->masks[n / N]);
       return pb;
     }
     else {
@@ -1284,20 +1350,27 @@ private:
   size_type destroy_all_in_nonempty_block(
     block_pointer pb, std::true_type /* trivially destructible */) noexcept
   {
-    return (size_type)core::popcount(pb->mask);
+    // TODO: implement
+    return destroy_all_in_nonempty_block(pb, std::false_type{});
   }
 
   size_type destroy_all_in_nonempty_block(
     block_pointer pb, std::false_type /* ~trivially destructible */) noexcept
   {
     size_type s = 0;
-    auto      mask = pb->mask;
+    auto      block_mask = pb->block_mask;
     do {
-      auto n = detail::unchecked_countr_zero(mask);
-      allocator_destroy(al(), pb->data() + n);
-      ++s;
-      mask &= mask - 1;
-    } while(mask);
+      auto n = detail::unchecked_countr_zero(block_mask);
+      auto mask = pb->masks[n];
+      do {
+        auto m = detail::unchecked_countr_zero(mask);
+        allocator_destroy(al(), boost::to_address(pb->data() + n * N + m));
+        ++s;
+        mask &= mask -1;
+      }
+      while(mask);
+      block_mask &= block_mask - 1;
+    } while(block_mask);
     return s;
   }
 
@@ -1308,14 +1381,14 @@ private:
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
       destroy_all_in_nonempty_block(pb);
-      if(pb->mask != full) unlink_available(pb);
-      allocator_deallocate(al(), pb, 1);
+      if(pb->full_block_mask != full) unlink_available(pb);
+      delete_block(pb);
     }
     /* empty blocks remaining */
     for(auto pbb = header.next_available; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next_available;
-      allocator_deallocate(al(), pb, 1);
+      delete_block(pb);
     }
     header.reset();
     num_blocks = 0;
