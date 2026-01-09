@@ -1342,7 +1342,8 @@ private:
   block_pointer new_block()
   {
     auto c = capacity_;
-    c = c <= N? N: c >= N * N ? N * N: c;
+    //c = c <= N? N: c >= N * N ? N * N: c;
+    c = N * N;
     auto cs = space_for(c);
     c = cs.first;
     auto s = cs.second;
