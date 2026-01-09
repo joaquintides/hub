@@ -443,6 +443,14 @@ private:
     return block_base::pointer_to(const_cast<block_base&>(*pbb_));
   }
 
+  bool is_first_of_block() const noexcept
+  {
+    return
+      ((pbb->masks[n / N] << (N - 1 - (n % N))) - 
+        ((mask_type)1 << (N - 1))) == 0 &&
+      ((pbb->block_mask << (N - 1 - (n / N))) - ((mask_type)1 << (N - 1))) == 0;
+  }
+
   block_base_pointer pbb = nullptr;
   int                n = 0;
 };
@@ -988,9 +996,11 @@ public:
 
   iterator erase(const_iterator first, const_iterator last)
   {
-    for(auto pbb = first.pbb; first != last; ) {
-      first = erase(first);
-      if(first.pbb != pbb) break;
+    if(!first.is_first_of_block()) {
+      for(auto pbb = first.pbb; first != last; ) {
+        first = erase(first);
+        if(first.pbb != pbb) break;
+      }
     }
     auto pbb = first.pbb;
     if(pbb != last.pbb){
@@ -1000,7 +1010,9 @@ public:
         BOOST_HUB_PREFETCH_BLOCK(pbb, T);
         size_ -= destroy_all_in_nonempty_block(pb);
         unlink(pb);
-        if(BOOST_UNLIKELY(pb->block_mask == full)) link_available_at_front(pb);
+        if(BOOST_UNLIKELY(pb->full_block_mask == full)) {
+          link_available_at_front(pb);
+        }
         pb->block_mask = 0;
       } while(pbb != last.pbb);
       first = {pbb};
@@ -1122,9 +1134,11 @@ public:
   template<typename F>
   bool visit_while(iterator first, iterator last, F f)
   {
-    for(auto pbb = first.pbb; first != last; ) {
-      if(!f(*first++)) return false;
-      if(first.pbb != pbb) break;
+    if(!first.is_first_of_block()) {
+      for(auto pbb = first.pbb; first != last; ) {
+        if(!f(*first++)) return false;
+        if(first.pbb != pbb) break;
+      }
     }
     auto pbb = first.pbb;
     if(pbb != last.pbb){
@@ -1132,12 +1146,17 @@ public:
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
         BOOST_HUB_PREFETCH_BLOCK(pbb, T);
-        auto mask = pb->mask;
+        auto block_mask = pb->block_mask;
         do {
-          auto n = detail::unchecked_countr_zero(mask);
-          if(!f(pb->data()[n])) return false;
-          mask &= mask - 1;
-        } while(mask);
+          auto n = detail::unchecked_countr_zero(block_mask);
+          auto mask = pb->masks[n];
+          do {
+            auto m = detail::unchecked_countr_zero(mask);
+            if(!f(pb->data()[n * N + m])) return false;
+            mask &= mask - 1;
+          } while(mask);
+          block_mask &= block_mask - 1;
+        } while(block_mask);
       } while(pbb != last.pbb);
       first = {pbb};
     }
