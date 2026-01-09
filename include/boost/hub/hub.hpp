@@ -291,6 +291,13 @@ void calculate_block_prefetch(
   p0 += 3 * sizeof(typename block_base::pointer); /* offset to next */
 }
 
+inline char* align_up(char* p, std::size_t alignment) noexcept
+{
+  return 
+    reinterpret_cast<char*>(
+      reinterpret_cast<std::uintptr_t>(p + (alignment - 1)) & -alignment);
+}
+
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
@@ -1332,17 +1339,9 @@ private:
       (bytes + sizeof(block) - 1) / sizeof(block)};
   }
 
-  static char* align_up(char* p, std::size_t alignment) noexcept
-  {
-    // TODO: From Boost.Align, consider something involving std::uintptr_t
-    return
-      reinterpret_cast<char*>(~(alignment - 1) &
-        (reinterpret_cast<std::size_t>(p) + alignment - 1));
-  }
-
   block_pointer new_block()
   {
-    auto c = capacity_ * 2;
+    auto c = capacity_;
     c = c <= N? N: c >= N * N ? N * N: c;
     auto cs = space_for(c);
     c = cs.first;
@@ -1351,15 +1350,14 @@ private:
     auto pb = allocator_allocate(al(), s);
     auto p = reinterpret_cast<char*>(to_address(pb));
     p += sizeof(block);
-    p = align_up(p, alignof(mask_type));
+    p = detail::align_up(p, alignof(mask_type));
     pb->masks = pointer_traits<mask_pointer>::pointer_to(
       *reinterpret_cast<mask_type*>(p));
     p += sizeof(mask_type) * num_subblocks;
-    p = align_up(p, alignof(value_type));
+    p = detail::align_up(p, alignof(value_type));
     pb->data_ = pointer_traits<pointer>::pointer_to(
       *reinterpret_cast<value_type*>(p));
-    pb->full_block_mask =
-      num_subblocks == N? 0: (~(mask_type)0) << num_subblocks;
+    pb->full_block_mask = num_subblocks == N? 0: full << num_subblocks;
     pb->block_mask = 0;
     std::memset(to_address(pb->masks), 0, sizeof(mask_type) * num_subblocks);
     link_available_at_back(pb);
