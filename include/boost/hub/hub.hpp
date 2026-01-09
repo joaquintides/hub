@@ -259,6 +259,11 @@ struct block_base
     next->prev = prev;
   }
 
+  int capacity() const noexcept
+  {
+    return (N - core::popcount(full_block_mask & ~ block_mask)) * N;
+  }
+
   pointer      prev_available,
                next_available,
                prev,
@@ -864,13 +869,13 @@ public:
 
   bool      empty() const noexcept { return size_ == 0; }
   size_type size() const noexcept { return size_; }
-  size_type max_size() const noexcept { return allocator_max_size(al()) * N;}
-  size_type capacity() const noexcept { return num_blocks * N; }
-  size_type memory() const noexcept { return num_blocks * sizeof(block); }
+  size_type max_size() const noexcept { return allocator_max_size(al()) * N; /* TODO: fix */ }
+  size_type capacity() const noexcept { return capacity_; }
+  size_type memory() const noexcept { return 0; }
 
   void reserve(size_type n)
   {
-    while(capacity() < n) (void)create_new_block();
+    while(capacity() < n) (void)new_block();
   }
 
   void shrink_to_fit()
@@ -892,8 +897,8 @@ public:
       pbb = pbb-> next_available;
       if(pb->block_mask == 0) {
          unlink_available(pb);
+         capacity_ -= pb->capacity();
          delete_block(pb);
-         --num_blocks;
       }
     }
   }
@@ -904,13 +909,12 @@ public:
     int  n, m;
     auto pb = retrieve_available_block(n, m);
     allocator_construct(
-      al(), boost::to_address(pb->data() + n * N + m),
-      std::forward<Args>(args)...);
+      al(), to_address(pb->data() + n * N + m), std::forward<Args>(args)...);
     auto& mask = pb->masks[n];
     mask |= mask + 1;
     if(BOOST_UNLIKELY(mask == 1)) {
       if(BOOST_UNLIKELY(pb->block_mask == 0)) link_at_back(pb);
-      pb->block_mask |= (mask_type)(1) << (n); // TODO: pb->block_mask |= pb->block_mask +1 would work ??
+      pb->block_mask |= (mask_type)(1) << n; // TODO: pb->block_mask |= pb->block_mask +1 would work ??
     }      
     else if(BOOST_UNLIKELY(mask == full)) {
       pb->full_block_mask |= pb->full_block_mask +1;
@@ -1029,7 +1033,7 @@ public:
       (void)this;
     });
     std::swap(header, x.header);
-    std::swap(num_blocks, x.num_blocks);
+    std::swap(capacity_, x.capacity_);
     std::swap(size_, x.size_);
   }
 
@@ -1048,8 +1052,9 @@ public:
       }
       unlink(pb); /* from x */
       link_at_back(pb);
-      --x.num_blocks;
-      ++num_blocks;
+      auto c = pb->capacity();
+      x.capacity_ -= c;
+      capacity_ += c;
     }
     size_ += x.size_;
     x.size_ = 0;
@@ -1093,8 +1098,8 @@ public:
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next;
-      if(!less(boost::to_address(p), boost::to_address(pb->data())) &&
-          less(boost::to_address(p), boost::to_address(pb->data() + N * N))) {
+      if(!less(to_address(p), to_address(pb->data())) &&
+          less(to_address(p), to_address(pb->data() + N * N))) {
         return {pb, (int)(p - pb->data())};
       }
     }
@@ -1200,6 +1205,7 @@ private:
   using block_allocator = typename block_typedefs::block_allocator;
   using allocator_base = empty_value<block_allocator, 0>;
   using mask_type = typename block_base::mask_type;
+  using mask_pointer = typename block_base::mask_pointer;
 
   static constexpr int N = block_base::N;
   static constexpr mask_type full = block_base::full;
@@ -1217,9 +1223,9 @@ private:
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept: 
     allocator_base{empty_init, al_}, header{std::move(x.header)}, 
-    num_blocks{x.num_blocks}, size_{x.size_}
+    capacity_{x.capacity_}, size_{x.size_}
   {
-    x.num_blocks = 0;
+    x.capacity_ = 0;
     x.size_ = 0;
   }
 
@@ -1229,9 +1235,9 @@ private:
   {
     if(al() == x.al()) {
       header = std::move(x.header);
-      num_blocks = x.num_blocks;
+      capacity_ = x.capacity_;
       size_ = x.size_;
-      x.num_blocks = 0;
+      x.capacity_ = 0;
       x.size_ = 0;
     }
     else {
@@ -1250,9 +1256,9 @@ private:
     reset();
     detail::move_assign_if(pocma{}, al(), x.al());
     header = std::move(x.header);
-    num_blocks = x.num_blocks;
+    capacity_ = x.capacity_;
     size_ = x.size_;
-    x.num_blocks = 0;
+    x.capacity_ = 0;
     x.size_ = 0;
   }
 
@@ -1312,31 +1318,58 @@ private:
     pb->unlink_available();
   }
 
-  block_pointer create_new_block()
+  static std::pair<size_type, size_type> space_for(size_type c) noexcept
   {
-    auto pb = allocator_allocate(al(), 1);
+    /* in sizeof(block) units */
+    size_type num_subblocks = (c + N - 1) / N;
+    size_type bytes = 
+      sizeof(block) + 
+      sizeof(mask_type) * num_subblocks +
+      sizeof(value_type) * num_subblocks * N +
+      alignof(mask_type) - 1 + alignof(value_type) - 1;
+    return {
+      num_subblocks * N,
+      (bytes + sizeof(block) - 1) / sizeof(block)};
+  }
 
-    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
-    pb->masks = allocator_allocate(mal, N);
-    auto val = allocator_rebind_t<Allocator, value_type>(al());
-    pb->data_ = allocator_allocate(val, N * N);
+  static char* align_up(char* p, std::size_t alignment) noexcept
+  {
+    // TODO: From Boost.Align, consider something involving std::uintptr_t
+    return
+      reinterpret_cast<char*>(~(alignment - 1) &
+        (reinterpret_cast<std::size_t>(p) + alignment - 1));
+  }
 
-    link_available_at_back(pb);
-    pb->full_block_mask = 0;
+  block_pointer new_block()
+  {
+    auto c = capacity_ * 2;
+    c = c <= N? N: c >= N * N ? N * N: c;
+    auto cs = space_for(c);
+    c = cs.first;
+    auto s = cs.second;
+    auto num_subblocks = c / N;
+    auto pb = allocator_allocate(al(), s);
+    auto p = reinterpret_cast<char*>(to_address(pb));
+    p += sizeof(block);
+    p = align_up(p, alignof(mask_type));
+    pb->masks = pointer_traits<mask_pointer>::pointer_to(
+      *reinterpret_cast<mask_type*>(p));
+    p += sizeof(mask_type) * num_subblocks;
+    p = align_up(p, alignof(value_type));
+    pb->data_ = pointer_traits<pointer>::pointer_to(
+      *reinterpret_cast<value_type*>(p));
+    pb->full_block_mask =
+      num_subblocks == N? 0: (~(mask_type)0) << num_subblocks;
     pb->block_mask = 0;
-    std::memset(boost::to_address(pb->masks), 0, sizeof(mask_type) * N);
-
-    ++num_blocks;
+    std::memset(to_address(pb->masks), 0, sizeof(mask_type) * num_subblocks);
+    link_available_at_back(pb);
+    capacity_ += c;
     return pb;
   }
 
   void delete_block(block_pointer pb) noexcept
   {
-    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
-    allocator_deallocate(mal, pb->masks, N);
-    auto val = allocator_rebind_t<Allocator, value_type>(al());
-    allocator_deallocate(val, pb->data_, N * N);
-    allocator_deallocate(al(), pb, 1);
+    allocator_deallocate(al(), pb, space_for(pb->capacity()).second);
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n, int& m)
@@ -1350,7 +1383,7 @@ private:
     else {
       n = 0;
       m = 0;
-      return create_new_block();
+      return new_block();
     }
   }
 
@@ -1404,7 +1437,7 @@ private:
       delete_block(pb);
     }
     header.reset();
-    num_blocks = 0;
+    capacity_ = 0;
     size_ = 0;
   }
 
@@ -1497,7 +1530,7 @@ private:
   }
 
   block_base      header;
-  size_type       num_blocks = 0;
+  size_type       capacity_ = 0;
   size_type       size_ = 0;
 };
 
