@@ -1339,11 +1339,41 @@ private:
       (bytes + sizeof(block) - 1) / sizeof(block)};
   }
 
+#if 1
   block_pointer new_block()
   {
     auto c = capacity_;
-    //c = c <= N? N: c >= N * N ? N * N: c;
-    c = N * N;
+    c = c <= N? N: c >= N * N ? N * N: c;
+    c = (c + N - 1) / N * N;
+    auto num_subblocks = c / N;
+    auto pb = allocator_allocate(al(), 1);
+    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
+    pb->masks = allocator_allocate(mal, num_subblocks);
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    pb->data_ = allocator_allocate(val, num_subblocks * N);
+    pb->full_block_mask = num_subblocks == N? 0: full << num_subblocks;
+    pb->block_mask = 0;
+    std::memset(to_address(pb->masks), 0, sizeof(mask_type) * num_subblocks);
+    link_available_at_back(pb);
+    capacity_ += c;
+    return pb;
+  }
+
+  void delete_block(block_pointer pb) noexcept
+  {
+    auto c = pb->capacity();
+    auto num_subblocks = c / N;
+    auto mal = allocator_rebind_t<Allocator, mask_type>(al());
+    allocator_deallocate(mal, pb->masks, num_subblocks);
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    allocator_deallocate(val, pb->data_, num_subblocks * N);
+    allocator_deallocate(al(), pb, 1);
+  }
+#else
+  block_pointer new_block()
+  {
+    auto c = capacity_;
+    c = c <= N? N: c >= N * N ? N * N: c;
     auto cs = space_for(c);
     c = cs.first;
     auto s = cs.second;
@@ -1370,6 +1400,7 @@ private:
   {
     allocator_deallocate(al(), pb, space_for(pb->capacity()).second);
   }
+#endif
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n, int& m)
   {
