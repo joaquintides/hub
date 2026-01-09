@@ -267,9 +267,13 @@ struct block_base
   mask_type    block_mask;
   mask_pointer masks;
 
-  // TODO: implement properly
-  inline static mask_type dummy_mask = (mask_type)1; /* sentinel */
+  static mask_type dummy_mask; 
 };
+
+template<typename VoidPointer>
+typename block_base<VoidPointer>::mask_type 
+block_base<VoidPointer>::dummy_mask =
+  (typename block_base<VoidPointer>::mask_type)1; /* sentinel */
 
 template<typename T,typename BlockBasePointer>
 void calculate_block_prefetch(
@@ -897,22 +901,23 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
-    int  n;
-    auto pb = retrieve_available_block(n);
+    int  n, m;
+    auto pb = retrieve_available_block(n, m);
     allocator_construct(
-      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
-    auto& mask = pb->masks[n / N];
+      al(), boost::to_address(pb->data() + n * N + m),
+      std::forward<Args>(args)...);
+    auto& mask = pb->masks[n];
     mask |= mask + 1;
     if(BOOST_UNLIKELY(mask == 1)) {
       if(BOOST_UNLIKELY(pb->block_mask == 0)) link_at_back(pb);
-      pb->block_mask |= (mask_type)(1) << (n / N); // TODO: pb->block_mask |= pb->block_mask +1 would work ??
+      pb->block_mask |= (mask_type)(1) << (n); // TODO: pb->block_mask |= pb->block_mask +1 would work ??
     }      
     else if(BOOST_UNLIKELY(mask == full)) {
       pb->full_block_mask |= pb->full_block_mask +1;
       if(BOOST_UNLIKELY(pb->full_block_mask == full)) unlink_available(pb);
     }
     ++size_;
-    return {pb, n};
+    return {pb, n * N + m};
   }
 
   template<typename... Args>
@@ -960,20 +965,7 @@ public:
 
   BOOST_FORCEINLINE iterator erase(const_iterator pos)
   {
-    auto pb = static_cast_block_pointer(pos.pbb);
-    auto n = pos.n;
-    ++pos;
-    allocator_destroy(al(), boost::to_address(pb->data() + n));
-    if(BOOST_UNLIKELY(pb->full_block_mask == full)) link_available_at_front(pb);
-    pb->full_block_mask &= ~((mask_type)(1) << (n / N));
-    if(BOOST_UNLIKELY(
-      (pb->masks[n / N] &= ~((mask_type)(1) << (n % N))) == 0)) {
-      if(BOOST_UNLIKELY(
-        (pb->block_mask &= ~((mask_type)(1) << (n / N))) == 0)) {
-        unlink(pb);
-      }
-    }
-    --size_;
+    erase_void(pos++);
     return {pos.pbb, pos.n};
   }
 
@@ -1013,6 +1005,7 @@ public:
         if(BOOST_UNLIKELY(pb->full_block_mask == full)) {
           link_available_at_front(pb);
         }
+        pb->full_block_mask &= ~pb->block_mask;
         pb->block_mask = 0;
       } while(pbb != last.pbb);
       first = {pbb};
@@ -1346,16 +1339,17 @@ private:
     allocator_deallocate(al(), pb, 1);
   }
 
-  BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
+  BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n, int& m)
   {
     if(header.next_available != pointer_to_header()){
       auto pb = static_cast_block_pointer(header.next_available);
-      n = detail::unchecked_countr_one(pb->full_block_mask) * N;
-      n += detail::unchecked_countr_one(pb->masks[n / N]);
+      n = detail::unchecked_countr_one(pb->full_block_mask);
+      m = detail::unchecked_countr_one(pb->masks[n]);
       return pb;
     }
     else {
       n = 0;
+      m = 0;
       return create_new_block();
     }
   }
