@@ -230,7 +230,6 @@ struct block_base
     next->prev = prev;
   }
 
-  char      live, index, n;
   pointer   next_available,
             prev,
             next;
@@ -251,12 +250,9 @@ void calculate_block_prefetch(
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
-  using super = block_base<pointer_rebind_t<ValuePointer, void>>;
-  using value_type = typename pointer_traits<ValuePointer>::element_type;
+  ValuePointer data() noexcept { return data_; }
 
-  value_type* data() noexcept { return reinterpret_cast<value_type*>(data_); }
-
-  alignas(value_type) unsigned char data_[sizeof(value_type) * super::N];
+  ValuePointer data_;
 };
 
 template<typename ValuePointer>
@@ -827,7 +823,7 @@ public:
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
          unlink_available_after(pb, pbb_prev);
-         deallocate_block(pb);
+         delete_block(pb);;
          --num_blocks;
       }
       else {
@@ -1271,31 +1267,22 @@ private:
     if(last_available == pb) last_available = pointer_to_header();
   }
 
-  block_pointer create_new_block()
+  BOOST_FORCEINLINE block_pointer create_new_block()
   {
-    char n = 64;
-    auto pb0 = allocator_allocate(al(), n);
-    auto pb = pb0;
-    for(char i = 0; i < n ; ++i, ++pb){
-      pb->live = true;
-      pb->index = i;
-      pb->n = n;
-      link_available_at_back(pb);
-      pb->mask = 0;
-      ++num_blocks;
-    }
-    return pb0;
+    auto pb = allocator_allocate(al(), 1);
+    allocator_rebind_t<Allocator, value_type> val(al());
+    pb->data_ = allocator_allocate(val, N);
+    pb->mask = 0;
+    link_available_at_back(pb);
+    ++num_blocks;
+    return pb;
   }
 
-  BOOST_FORCEINLINE void deallocate_block(block_pointer pb) 
+  void delete_block(block_pointer pb)
   {
-    pb->live = false;
-    auto pb0 = pb - pb->index;
-    pb = pb0;
-    for(char i = 0; i < pb0->n; ++i, ++pb) {
-      if(pb->live) return;
-    }
-    allocator_deallocate(al(), pb0, pb0->n);
+    allocator_rebind_t<Allocator, value_type> val(al());
+    allocator_deallocate(val, pb->data_, N);
+    allocator_deallocate(al(), pb, 1);
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
@@ -1356,7 +1343,7 @@ private:
         unlink(pb);
       }
       unlink_available(pb);
-      deallocate_block(pb);
+      delete_block(pb);;
     }
     /* full blocks remaining */
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
@@ -1365,7 +1352,7 @@ private:
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
       destroy_all_in_full_block(pb);
-      deallocate_block(pb);
+      delete_block(pb);;
     }
     header.reset();
     last_available = pointer_to_header();
@@ -1528,3 +1515,4 @@ erase(hub<T, Allocator>& x, const U& value)
 #endif
 
 #endif
+
