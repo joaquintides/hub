@@ -332,7 +332,8 @@ public:
     typename Value2Pointer,
     typename = enable_if_consts_to_element_type_t<Value2Pointer>
   >
-  iterator(const iterator<Value2Pointer>& x) noexcept: pbb{x.pbb}, n{x.n} {}
+  iterator(const iterator<Value2Pointer>& x) noexcept:
+    pbb{x.pbb}, n{x.n}, m{x.m} {}
       
   iterator& operator=(const iterator& x) = default;
 
@@ -344,12 +345,13 @@ public:
   {
     pbb = x.pbb;
     n = x.n;
+    m = x.m;
     return *this;
   }
 
   pointer operator->() const noexcept
   {
-    return static_cast<block&>(*pbb).data() + n;
+    return static_cast<block&>(*pbb).data() + n * N + m;
   }
 
   reference operator*() const noexcept
@@ -359,22 +361,21 @@ public:
 
   BOOST_FORCEINLINE iterator& operator++() noexcept
   {
-    auto mask = (pbb->masks[n / N] >> (n % N)) - 1;
+    auto mask = (pbb->masks[n] >> m) - 1;
     if(BOOST_LIKELY(mask != 0)) {
-      n += detail::unchecked_countr_zero(mask);
+      m += detail::unchecked_countr_zero(mask);
     }
     else {
-      n = n / N * N;
-      auto block_mask = (pbb->block_mask >> (n / N)) - 1;
+      auto block_mask = (pbb->block_mask >> n) - 1;
       if(BOOST_LIKELY(block_mask != 0)) {
-        n += detail::unchecked_countr_zero(block_mask) * N;
-        n += detail::unchecked_countr_zero(pbb->masks[n / N]);
+        n += detail::unchecked_countr_zero(block_mask);
+        BOOST_HUB_PREFETCH(static_cast<block&>(*pbb).data() + n * N);
+        m = detail::unchecked_countr_zero(pbb->masks[n]);
       }
       else{
         pbb = pbb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb->next, value_type);
-        n = detail::unchecked_countr_zero(pbb->block_mask) * N;
-        n += detail::unchecked_countr_zero(pbb->masks[n / N]);
+        n = detail::unchecked_countr_zero(pbb->block_mask);
+        m = detail::unchecked_countr_zero(pbb->masks[n]);
       }
     }
     return *this;
@@ -390,23 +391,21 @@ public:
   BOOST_FORCEINLINE iterator& operator--() noexcept
   {
     auto mask = 
-      (pbb->masks[n / N] << (N - 1 - (n % N))) - ((mask_type)1 << (N - 1));
+      (pbb->masks[n] << (N - 1 - m)) - ((mask_type)1 << (N - 1));
     if(BOOST_LIKELY(mask != 0)) {
-      n -= detail::unchecked_countl_zero(mask);
+      m -= detail::unchecked_countl_zero(mask);
     }
     else {
-      n = n / N * N;
       auto block_mask = 
-        (pbb->block_mask << (N - 1 - (n / N))) - ((mask_type)1 << (N - 1));
+        (pbb->block_mask << (N - 1 - n)) - ((mask_type)1 << (N - 1));
       if(BOOST_LIKELY(block_mask != 0)) {
-        n -= detail::unchecked_countl_zero(block_mask) * N;
-        n -= detail::unchecked_countl_zero(pbb->masks[n / N]);
+        n -= detail::unchecked_countl_zero(block_mask);
+        m = N - 1 - detail::unchecked_countl_zero(pbb->masks[n]);
       }
       else{
         pbb = pbb->prev;
-        BOOST_HUB_PREFETCH_BLOCK(pbb->prev, value_type);
-        n = (N - 1 - detail::unchecked_countl_zero(pbb->mask)) * N;
-        n -= detail::unchecked_countl_zero(pbb->masks[n / N]);
+        n = (N - 1 - detail::unchecked_countl_zero(pbb->mask));
+        m = N - 1 - detail::unchecked_countl_zero(pbb->masks[n]);
       }
     }
     return *this;
@@ -421,7 +420,7 @@ public:
 
   friend bool operator==(const iterator& x, const iterator& y) noexcept
   {
-    return x.pbb == y.pbb && x.n == y.n;
+    return x.pbb == y.pbb && x.n == y.n && x.m == y.m;
   }
   
   friend bool operator!=(const iterator& x, const iterator& y) noexcept
@@ -443,14 +442,14 @@ private:
 
   static constexpr int N = block_base::N;
 
-  iterator(const_block_base_pointer pbb_, int n_) noexcept:
-    pbb{const_cast_block_base_pointer(pbb_)}, n{n_} {}
+  iterator(const_block_base_pointer pbb_, int n_, int m_) noexcept:
+    pbb{const_cast_block_base_pointer(pbb_)}, n{n_}, m{m_} {}
 
   iterator(const_block_base_pointer pbb_) noexcept:
-    pbb{const_cast_block_base_pointer(pbb_)} 
+    pbb{const_cast_block_base_pointer(pbb_)},
+    n{detail::unchecked_countr_zero(pbb->block_mask)},
+    m{detail::unchecked_countr_zero(pbb->masks[n])}
   {
-    n = detail::unchecked_countr_zero(pbb->block_mask) * N;
-    n += detail::unchecked_countr_zero(pbb->masks[n / N]);
   }
 
   static block_base_pointer
@@ -462,13 +461,12 @@ private:
   bool is_first_of_block() const noexcept
   {
     return
-      ((pbb->masks[n / N] << (N - 1 - (n % N))) - 
-        ((mask_type)1 << (N - 1))) == 0 &&
-      ((pbb->block_mask << (N - 1 - (n / N))) - ((mask_type)1 << (N - 1))) == 0;
+      ((pbb->masks[n] << (N - 1 - m)) - ((mask_type)1 << (N - 1))) == 0 &&
+      ((pbb->block_mask << (N - 1 - n)) - ((mask_type)1 << (N - 1))) == 0;
   }
 
   block_base_pointer pbb = nullptr;
-  int                n = 0;
+  int                n = 0, m = 0;
 };
 
 template<typename T, std::size_t N>
@@ -860,9 +858,9 @@ public:
 
   iterator               begin() noexcept { return ++end(); }
   const_iterator         begin() const noexcept { return ++end(); }
-  iterator               end() noexcept { return {pointer_to_header(), 0}; }
+  iterator               end() noexcept { return {pointer_to_header(), 0, 0}; }
   const_iterator         end() const noexcept 
-                         { return {pointer_to_header(), 0}; }
+                         { return {pointer_to_header(), 0, 0}; }
   reverse_iterator       rbegin() noexcept { return reverse_iterator{end()}; }
   const_reverse_iterator rbegin() const noexcept 
                          { return const_reverse_iterator{end()}; }
@@ -928,7 +926,7 @@ public:
       if(BOOST_UNLIKELY(pb->full_block_mask == full)) unlink_available(pb);
     }
     ++size_;
-    return {pb, n * N + m};
+    return {pb, n, m};
   }
 
   template<typename... Args>
@@ -977,7 +975,7 @@ public:
   BOOST_FORCEINLINE iterator erase(const_iterator pos)
   {
     erase_void(pos++);
-    return {pos.pbb, pos.n};
+    return {pos.pbb, pos.n, pos.m};
   }
 
   BOOST_FORCEINLINE void erase_void(const_iterator pos)
@@ -1022,7 +1020,7 @@ public:
       first = {pbb};
     }
     while(first != last) first = erase(first);
-    return {last.pbb, last.n};
+    return {last.pbb, last.n, last.m};
   }
 
   void swap(hub& x)
@@ -1173,7 +1171,8 @@ public:
   bool visit_while(const_iterator first, const_iterator last, F f) const
   {
     return const_cast<hub*>(this)->visit_while(
-      iterator{first.pbb, first.n}, iterator{last.pbb, last.n},
+      iterator{first.pbb, first.n, first.m},
+      iterator{last.pbb, last.n, last.m},
       [&] (const value_type& x) { return f(x); });
   }
 
@@ -1325,7 +1324,7 @@ private:
     pb->unlink_available();
   }
 
-#if 1
+#if 0
   static std::pair<size_type, size_type> space_for(size_type c) noexcept
   {
     /* in sizeof(block) units */
@@ -1371,7 +1370,7 @@ private:
     allocator_deallocate(val, pb->data_, num_subblocks * N);
     allocator_deallocate(al(), pb, space_for(c).second);
   }
-#elif 0
+#elif 1
   block_pointer new_block()
   {
     auto c = capacity_;
