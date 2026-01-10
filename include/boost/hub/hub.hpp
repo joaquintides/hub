@@ -1325,21 +1325,53 @@ private:
     pb->unlink_available();
   }
 
+#if 1
   static std::pair<size_type, size_type> space_for(size_type c) noexcept
   {
     /* in sizeof(block) units */
     size_type num_subblocks = (c + N - 1) / N;
     size_type bytes = 
       sizeof(block) + 
-      sizeof(mask_type) * num_subblocks +
-      sizeof(value_type) * num_subblocks * N +
-      alignof(mask_type) - 1 + alignof(value_type) - 1;
+      sizeof(mask_type) * num_subblocks + 
+      alignof(mask_type) - 1;
     return {
       num_subblocks * N,
       (bytes + sizeof(block) - 1) / sizeof(block)};
   }
 
-#if 1
+  block_pointer new_block()
+  {
+    auto c = capacity_;
+    c = c <= N? N: c >= N * N ? N * N: c;
+    auto cs = space_for(c);
+    c = cs.first;
+    auto s = cs.second;
+    auto num_subblocks = c / N;
+    auto pb = allocator_allocate(al(), s);
+    auto p = reinterpret_cast<char*>(to_address(pb));
+    p += sizeof(block);
+    p = detail::align_up(p, alignof(mask_type));
+    pb->masks = pointer_traits<mask_pointer>::pointer_to(
+      *reinterpret_cast<mask_type*>(p));
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    pb->data_ = allocator_allocate(val, num_subblocks * N);
+    pb->full_block_mask = num_subblocks == N? 0: full << num_subblocks;
+    pb->block_mask = 0;
+    std::memset(to_address(pb->masks), 0, sizeof(mask_type) * num_subblocks);
+    link_available_at_back(pb);
+    capacity_ += c;
+    return pb;
+  }
+
+  void delete_block(block_pointer pb) noexcept
+  {
+    auto c = pb->capacity();
+    auto num_subblocks = c / N;
+    auto val = allocator_rebind_t<Allocator, value_type>(al());
+    allocator_deallocate(val, pb->data_, num_subblocks * N);
+    allocator_deallocate(al(), pb, space_for(c).second);
+  }
+#elif 0
   block_pointer new_block()
   {
     auto c = capacity_;
@@ -1370,6 +1402,20 @@ private:
     allocator_deallocate(al(), pb, 1);
   }
 #else
+  static std::pair<size_type, size_type> space_for(size_type c) noexcept
+  {
+    /* in sizeof(block) units */
+    size_type num_subblocks = (c + N - 1) / N;
+    size_type bytes = 
+      sizeof(block) + 
+      sizeof(mask_type) * num_subblocks +
+      sizeof(value_type) * num_subblocks * N +
+      alignof(mask_type) - 1 + alignof(value_type) - 1;
+    return {
+      num_subblocks * N,
+      (bytes + sizeof(block) - 1) / sizeof(block)};
+  }
+
   block_pointer new_block()
   {
     auto c = capacity_;
