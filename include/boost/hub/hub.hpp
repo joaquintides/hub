@@ -273,12 +273,9 @@ void calculate_block_prefetch(
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
-  using super = block_base<pointer_rebind_t<ValuePointer, void>>;
-  using value_type = typename pointer_traits<ValuePointer>::element_type;
+  ValuePointer data() noexcept { return data_; }
 
-  value_type* data() noexcept { return reinterpret_cast<value_type*>(data_); }
-
-  alignas(value_type) unsigned char data_[sizeof(value_type) * super::N];
+  ValuePointer data_;
 };
 
 template<typename ValuePointer>
@@ -849,7 +846,7 @@ public:
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
          unlink_available(pb);
-         allocator_deallocate(al(), pb, 1);
+         delete_block(pb);
          --num_blocks;
       }
     }
@@ -1253,13 +1250,22 @@ private:
     pb->unlink_available();
   }
 
-  BOOST_FORCEINLINE block_pointer create_new_block()
+  block_pointer create_new_block()
   {
     auto pb = allocator_allocate(al(), 1);
     link_available_at_back(pb);
+    allocator_rebind_t<Allocator, value_type> val(al());
+    pb->data_ = allocator_allocate(val, N);
     pb->mask = 0;
     ++num_blocks;
     return pb;
+  }
+
+  void delete_block(block_pointer pb)
+  {
+    allocator_rebind_t<Allocator, value_type> val(al());
+    allocator_deallocate(val, pb->data_, N);
+    allocator_deallocate(al(), pb, 1);
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
@@ -1309,13 +1315,13 @@ private:
       BOOST_HUB_PREFETCH_BLOCK(pbb, T);
       destroy_all_in_nonempty_block(pb);
       if(pb->mask != full) unlink_available(pb);
-      allocator_deallocate(al(), pb, 1);
+      delete_block(pb);
     }
     /* empty blocks remaining */
     for(auto pbb = header.next_available; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next_available;
-      allocator_deallocate(al(), pb, 1);
+      delete_block(pb);
     }
     header.reset();
     num_blocks = 0;
