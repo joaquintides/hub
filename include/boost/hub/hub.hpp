@@ -83,7 +83,7 @@
  * functions because of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109985
  */
 
-#if defined(BOOST_GCC)||defined(BOOST_CLANG)
+#if defined(BOOST_GCC) || defined(BOOST_CLANG)
 #define BOOST_HUB_PREFETCH(p) __builtin_prefetch((const char*)(p))
 #elif defined(BOOST_HUB_SSE2)
 #define BOOST_HUB_PREFETCH(p) _mm_prefetch((const char*)(p), _MM_HINT_T0)
@@ -91,12 +91,11 @@
 #define BOOST_HUB_PREFETCH(p) ((void)(p))
 #endif
 
-#define BOOST_HUB_PREFETCH_BLOCK(pbb, T)                           \
-do{                                                                \
-  constexpr int  cache_line = 64;                                  \
-  const char    *p0, *p1;                                          \
-  ::boost::hubs::detail::calculate_block_prefetch<T>(pbb, p0, p1); \
-  for(; p0 < p1; p0 += cache_line) BOOST_HUB_PREFETCH(p0);         \
+#define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
+do{                                          \
+  auto p0 = &static_cast<Block&>(*(pbb));    \
+  BOOST_HUB_PREFETCH(p0);                    \
+  BOOST_HUB_PREFETCH(p0->data);              \
 } while(0)
 
 #if defined(BOOST_MSVC)
@@ -167,44 +166,6 @@ struct block_base
     return pointer_traits<const_pointer>::pointer_to(x);
   }
 
-  block_base() { reset(); }
-
-  block_base(block_base&& x) noexcept: block_base{}
-  {
-    next_available = x.next_available;
-    if(x.prev != pointer_to(x)) {
-      prev = x.prev;
-      next = x.next;
-      next->prev = pointer_to(*this);
-      prev->next = pointer_to(*this);
-    }
-    mask = x.mask;
-    x.reset();
-  }
-
-  block_base& operator=(block_base&& x) noexcept
-  {
-    reset();
-    next_available = x.next_available;
-    if(x.prev != pointer_to(x)) {
-      prev = x.prev;
-      next = x.next;
-      next->prev = pointer_to(*this);
-      prev->next = pointer_to(*this);
-    }
-    mask = x.mask;
-    x.reset();
-    return *this;
-  }
-
-  void reset() noexcept
-  {
-    next_available = nullptr;
-    prev = pointer_to(*this);
-    next = pointer_to(*this);
-    mask = 1; /* sentinel */
-  }
-
   BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
   {
     next_available = p->next_available;
@@ -250,9 +211,59 @@ void calculate_block_prefetch(
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
-  ValuePointer data() noexcept { return data_; }
+  ValuePointer data;
+};
 
-  ValuePointer data_;
+template<typename ValuePointer>
+struct block_list_header: block<ValuePointer>
+{
+  using super = block<ValuePointer>;
+  using super::pointer_to;
+  using super::next_available;
+  using super::prev;
+  using super::next;
+  using super::mask;
+  using super::data;
+
+  block_list_header() 
+  { 
+    reset();
+    mask = 1; /* sentinel */
+    data = nullptr;
+  }
+
+  block_list_header(block_list_header&& x) noexcept: block_list_header{}
+  {
+    next_available = x.next_available;
+    if(x.prev != pointer_to(x)) {
+      prev = x.prev;
+      next = x.next;
+      next->prev = pointer_to(*this);
+      prev->next = pointer_to(*this);
+    }
+    x.reset();
+  }
+
+  block_list_header& operator=(block_list_header&& x) noexcept
+  {
+    reset();
+    next_available = x.next_available;
+    if(x.prev != pointer_to(x)) {
+      prev = x.prev;
+      next = x.next;
+      next->prev = pointer_to(*this);
+      prev->next = pointer_to(*this);
+    }
+    x.reset();
+    return *this;
+  }
+
+  void reset() noexcept
+  {
+    next_available = nullptr;
+    prev = pointer_to(*this);
+    next = pointer_to(*this);
+  }
 };
 
 template<typename ValuePointer>
@@ -298,7 +309,7 @@ public:
 
   pointer operator->() const noexcept
   {
-    return static_cast<block&>(*pbb).data() + n;
+    return static_cast<block&>(*pbb).data + n;
   }
 
   reference operator*() const noexcept
@@ -314,7 +325,7 @@ public:
     }
     else {
       pbb = pbb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, value_type);
+      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
       n = detail::unchecked_countr_zero(pbb->mask);
     }
     return *this;
@@ -616,6 +627,7 @@ struct block_typedefs
   using block = detail::block<pointer>;
   using block_pointer = pointer_rebind_t<block>;
   using block_allocator = allocator_rebind_t<Allocator,block>;
+  using block_list_header = detail::block_list_header<pointer>;
 };
 
 } /* namespace hubs::detail */
@@ -797,7 +809,7 @@ public:
   size_type size() const noexcept { return size_; }
   size_type max_size() const noexcept { return allocator_max_size(al()) * N;}
   size_type capacity() const noexcept { return num_blocks * N; }
-  size_type memory() const noexcept { return num_blocks * sizeof(block); }
+  size_type memory() const noexcept { return num_blocks * (sizeof(block) + sizeof(value_type) * N); }
 
   void reserve(size_type n)
   {
@@ -823,7 +835,7 @@ public:
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
          unlink_available_after(pb, pbb_prev);
-         delete_block(pb);;
+         delete_block(pb);
          --num_blocks;
       }
       else {
@@ -838,7 +850,7 @@ public:
     int  n;
     auto pb = retrieve_available_block(n);
     allocator_construct(
-      al(), pb->data() + n, std::forward<Args>(args)...);
+      al(), boost::to_address(pb->data + n), std::forward<Args>(args)...);
     pb->mask |= pb->mask + 1;
     if(BOOST_UNLIKELY(pb->mask == 1)) link_at_back(pb);
     else if(BOOST_UNLIKELY(pb->mask == full)) unlink_available(pb);
@@ -894,7 +906,7 @@ public:
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
     ++pos;
-    allocator_destroy(al(), pb->data() + n);
+    allocator_destroy(al(), boost::to_address(pb->data + n));
     auto bit = (mask_type)(1) << n;
     if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
     else if(BOOST_UNLIKELY(pb->mask == bit)) unlink(pb);
@@ -907,7 +919,7 @@ public:
   {
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
-    allocator_destroy(al(), pb->data() + n);
+    allocator_destroy(al(), pb->data + n);
     auto bit = (mask_type)(1) << n;
     if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
     else if(BOOST_UNLIKELY(pb->mask == bit)) unlink(pb);
@@ -926,7 +938,7 @@ public:
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
         size_ -= destroy_all_in_nonempty_block(pb);
         unlink(pb);
         if(BOOST_UNLIKELY(pb->mask == full)) link_available_at_front(pb);
@@ -1023,7 +1035,9 @@ public:
       /* compact elements and build an array of pointers to data chunks */
       auto p = allocate_unique_noinit<T*[]>(al(), (size_ + N - 1) / N);
       std::size_t num_active_blocks = 0;
-      compact([&] (block_pointer pb){ p[num_active_blocks++] = pb->data(); });
+      compact([&] (block_pointer pb){ 
+        p[num_active_blocks++] = boost::to_address(pb->data); 
+      });
 
       std::sort(sort_iterator{&p[0], 0}, sort_iterator{&p[0], size_}, comp);
     }
@@ -1035,9 +1049,9 @@ public:
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next;
-      if(!less(boost::to_address(p), pb->data()) &&
-          less(boost::to_address(p), pb->data() + N)) {
-        return {pb, (int)(p - pb->data())};
+      if(!less(boost::to_address(p), boost::to_address(pb->data)) &&
+          less(boost::to_address(p), boost::to_address(pb->data + N))) {
+        return {pb, (int)(p - pb->data)};
       }
     }
     return end(); /* shouldn't assert? */
@@ -1079,11 +1093,11 @@ public:
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
         auto mask = pb->mask;
         do {
           auto n = detail::unchecked_countr_zero(mask);
-          if(!f(pb->data()[n])) return {pbb, n};
+          if(!f(pb->data[n])) return {pbb, n};
           mask &= mask - 1;
         } while(mask);
       } while(pbb != last.pbb);
@@ -1136,6 +1150,7 @@ private:
   using block = typename block_typedefs::block;
   using block_pointer = typename block_typedefs::block_pointer;
   using block_allocator = typename block_typedefs::block_allocator;
+  using block_list_header = typename block_typedefs::block_list_header;
   using allocator_base = empty_value<block_allocator, 0>;
   using mask_type = typename block_base::mask_type;
 
@@ -1267,21 +1282,28 @@ private:
     if(last_available == pb) last_available = pointer_to_header();
   }
 
-  BOOST_FORCEINLINE block_pointer create_new_block()
+  block_pointer create_new_block()
   {
-    auto pb = allocator_allocate(al(), 1);
+    struct deleter
+    {
+      using pointer = block_pointer;
+      void operator()(pointer p) noexcept { allocator_deallocate(al, p, 1); }
+      block_allocator al;
+    };
+
+    std::unique_ptr<block, deleter> pb{allocator_allocate(al(), 1), {al()}}; 
     allocator_rebind_t<Allocator, value_type> val(al());
-    pb->data_ = allocator_allocate(val, N);
+    pb->data = allocator_allocate(val, N);
     pb->mask = 0;
-    link_available_at_back(pb);
+    link_available_at_back(pb.get());
     ++num_blocks;
-    return pb;
+    return pb.release();
   }
 
   void delete_block(block_pointer pb)
   {
     allocator_rebind_t<Allocator, value_type> val(al());
-    allocator_deallocate(val, pb->data_, N);
+    allocator_deallocate(val, pb->data, N);
     allocator_deallocate(al(), pb, 1);
   }
 
@@ -1318,7 +1340,7 @@ private:
     auto      mask = pb->mask;
     do {
       auto n = detail::unchecked_countr_zero(mask);
-      allocator_destroy(al(), pb->data() + n);
+      allocator_destroy(al(), pb->data + n);
       ++s;
       mask &= mask - 1;
     } while(mask);
@@ -1328,7 +1350,9 @@ private:
   size_type destroy_all_in_full_block(block_pointer pb) noexcept
   {
     BOOST_ASSERT(pb->mask == full);
-    for(int n = 0; n < N; ++n) allocator_destroy(al(), pb->data() + n);
+    for(int n = 0; n < N; ++n) {
+      allocator_destroy(al(), boost::to_address(pb->data + n));
+    }
     return (size_type)N;
   }
 
@@ -1337,22 +1361,22 @@ private:
     for(auto pbb = header.next_available; pbb != nullptr; ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next_available;
-      BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+      //BOOST_HUB_PREFETCH_BLOCK(pbb, block);
       if(pb->mask != 0) {
         destroy_all_in_nonempty_block(pb);
         unlink(pb);
       }
       unlink_available(pb);
-      delete_block(pb);;
+      delete_block(pb);
     }
     /* full blocks remaining */
     for(auto pbb = header.next; pbb != pointer_to_header(); ) {
       BOOST_ASSERT(pbb->mask == full);
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+      BOOST_HUB_PREFETCH_BLOCK(pbb, block);
       destroy_all_in_full_block(pb);
-      delete_block(pb);;
+      delete_block(pb);
     }
     header.reset();
     last_available = pointer_to_header();
@@ -1368,7 +1392,7 @@ private:
       int  n;
       auto pb = retrieve_available_block(n);
       for(; ; ) {
-        construct(pb->data() + n, first++);
+        construct(boost::to_address(pb->data + n), first++);
         ++size_;
         if(BOOST_UNLIKELY(pb->mask == 0)) link_at_back(pb);
         pb->mask |= pb->mask +1;
@@ -1398,10 +1422,10 @@ private:
         auto pb = static_cast_block_pointer(pbb);
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
           if(pb->mask & bit) { /* full slot */
-            insert(pb->data() + n, first++);
+            insert(boost::to_address(pb->data + n), first++);
           }
           else { /* empty slot */
-            construct(pb->data() + n, first++);
+            construct(boost::to_address(pb->data + n), first++);
             ++size_;
             pb->mask |= bit;
             if(pb->mask == full) unlink_available(pb);
@@ -1432,13 +1456,14 @@ private:
       for(;  ; ) {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pbb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, T);
+        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
         track(pb);
         if(pb->mask != full) {
           do{
             auto n = detail::unchecked_countr_one(pb->mask);
             if(pb == last.pbb && n > last.n) return;
-            allocator_construct(al(), pb->data() + n, std::move(*last));
+            allocator_construct(
+              al(), boost::to_address(pb->data + n), std::move(*last));
             pb->mask |= pb->mask + 1;
             ++size_;
             erase(last--); /* decreases size_ */
@@ -1450,7 +1475,7 @@ private:
     }
   }
 
-  block_base          header;
+  block_list_header   header;
   block_base_pointer  last_available = pointer_to_header();
   size_type           num_blocks = 0;
   size_type           size_ = 0;
