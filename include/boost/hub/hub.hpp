@@ -325,7 +325,8 @@ public:
     }
     else {
       pbb = pbb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
+      //BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
+      BOOST_HUB_PREFETCH(boost::to_address(static_cast<block&>(*pbb).data));
       n = detail::unchecked_countr_zero(pbb->mask);
     }
     return *this;
@@ -1273,6 +1274,7 @@ private:
     BOOST_ASSERT(header.next_available == pb);
     pb->unlink_available_after(pointer_to_header());
     if(last_available == pb) last_available = pointer_to_header();
+    BOOST_HUB_PREFETCH(boost::to_address(header.next_available));
   }
 
   BOOST_FORCEINLINE void unlink_available_after(
