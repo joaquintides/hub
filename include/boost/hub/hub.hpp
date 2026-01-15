@@ -213,12 +213,20 @@ struct block_list: block<ValuePointer>
   using block_base_pointer = typename block_base::pointer;
   using const_block_base_pointer = typename block_base::const_pointer;
   using block_pointer = pointer_rebind_t<ValuePointer, block>;
+  using block::full;
   using block::pointer_to;
   using block::next_available;
   using block::prev;
   using block::next;
   using block::mask;
   using block::data;
+
+  static block_pointer 
+  static_cast_block_pointer(block_base_pointer pbb) noexcept
+  {
+    return pointer_traits<block_pointer>::pointer_to(
+      static_cast<block&>(*pbb));
+  }
 
   block_list() 
   { 
@@ -314,6 +322,17 @@ struct block_list: block<ValuePointer>
   {
     pb->unlink_available_after(pbb_prev);
     if(last_available == pb) last_available = header();
+  }
+
+  void purge_unavailable() noexcept
+  {
+    for(auto pbb_prev = header(), pbb = pbb_prev->next_available;
+        pbb != header(); ) {
+      auto pb = static_cast_block_pointer(pbb);
+      pbb = pbb->next_available;
+      if(pb->mask == full) unlink_available_after(pb, pbb_prev);
+      else pbb_prev = pb;
+    }
   }
 
   block_base_pointer last_available;
@@ -844,10 +863,8 @@ public:
 
   iterator               begin() noexcept { return ++end(); }
   const_iterator         begin() const noexcept { return ++end(); }
-  iterator               end() noexcept 
-                         { return {blist.header(), 0}; }
-  const_iterator         end() const noexcept 
-                         { return {blist.header(), 0}; }
+  iterator               end() noexcept { return {blist.header(), 0}; }
+  const_iterator         end() const noexcept { return {blist.header(), 0}; }
   reverse_iterator       rbegin() noexcept { return reverse_iterator{end()}; }
   const_reverse_iterator rbegin() const noexcept 
                          { return const_reverse_iterator{end()}; }
@@ -872,7 +889,7 @@ public:
 
   void shrink_to_fit()
   {
-    compact([] (block_pointer) {});
+    compact();
     trim_capacity();
   }
 
@@ -1087,12 +1104,12 @@ public:
 
     if(size_ > 1) {
       /* compact elements and build an array of pointers to data chunks */
+      compact();
       auto p = allocate_unique_noinit<T*[]>(al(), (size_ + N - 1) / N);
-      std::size_t num_active_blocks = 0;
-      compact([&] (block_pointer pb){ 
-        p[num_active_blocks++] = boost::to_address(pb->data); 
-      });
-
+      std::size_t n = 0;
+      for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
+        p[n++] = boost::to_address(static_cast_block_pointer(pbb)->data);
+      }
       std::sort(sort_iterator{&p[0], 0}, sort_iterator{&p[0], size_}, comp);
     }
   }
@@ -1221,6 +1238,13 @@ private:
     hub& x;
   };
 
+  struct purge_unavailable_on_exit
+  {
+    ~purge_unavailable_on_exit() { x.blist.purge_unavailable(); }
+
+    hub& x;
+  };
+
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept: 
     allocator_base{empty_init, al_}, blist{std::move(x.blist)},
@@ -1279,9 +1303,10 @@ private:
     }
   }
 
-  static block_pointer static_cast_block_pointer(block_base_pointer x) noexcept
+  static block_pointer 
+  static_cast_block_pointer(block_base_pointer pbb) noexcept
   {
-    return pointer_traits<block_pointer>::pointer_to(static_cast<block&>(*x));
+    return block_list::static_cast_block_pointer(pbb);
   }
 
   block_pointer create_new_block()
@@ -1368,7 +1393,6 @@ private:
         destroy_all_in_nonempty_block(pb);
         blist.unlink(pb);
       }
-      blist.unlink_available(pb);
       delete_block(pb);
     }
     /* full blocks remaining */
@@ -1414,11 +1438,16 @@ private:
   void range_assign_impl(
     Incrementable first, Sentinel last, Construct construct, Insert insert)
   {
-    // TODO: incorrect as it breaks unlink_available(pb) invariant
     auto pbb = blist.next;
     int  n = 0;
     if(first != last) {
-      /* consume active blocks */
+      /* Consume active blocks.
+       * NB: we need to purge the available list after traversal cause
+       * unlink_available(pb) requires that pb be the first available block,
+       * which is generally not the case when pb has been reached through
+       * the _active_ list.
+       */
+      purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
       for(; pbb != blist.header(); pbb = pbb->next, n = 0) {
         auto pb = static_cast_block_pointer(pbb);
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
@@ -1429,7 +1458,6 @@ private:
             construct(boost::to_address(pb->data + n), first++);
             ++size_;
             pb->mask |= bit;
-            if(pb->mask == full) blist.unlink_available(pb);
           }
           if(first == last) goto exit;
         }
@@ -1447,32 +1475,58 @@ private:
     }
   }
 
-  template<typename Track>
-  void compact(Track track)
+  void compact()
   {
-     // TODO: implement
-    if(size_) {
-      auto last = --end();
-      auto pbb = blist.next;
-      for(;  ; ) {
-        auto pb = static_cast_block_pointer(pbb);
-        pbb = pbb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
-        track(pb);
-        if(pb->mask != full) {
-          do{
-            auto n = detail::unchecked_countr_one(pb->mask);
-            if(pb == last.pbb && n > last.n) return;
-            allocator_construct(
-              al(), boost::to_address(pb->data + n), std::move(*last));
-            pb->mask |= pb->mask + 1;
-            ++size_;
-            erase(last--); /* decreases size_ */
-          }while(pb->mask != full);
-          blist.unlink_available(pb);
-        }
-        else if(pb == last.pbb) return;
+    for(auto pbbx = blist.next_available; pbbx != blist.header(); ) {
+      auto pbx = static_cast_block_pointer(pbbx);
+      if(pbx->mask != 0) {
+        auto pbby = pbbx->next_available;
+        do{
+          while(pbby->mask == 0) pbby = pbby->next_available;
+          if(pbby == blist.header()) {
+            compact(pbx);
+            blist.unlink(pbx);
+            blist.link_at_back(pbx);
+            return;
+          }
+          else{
+            auto pby = static_cast_block_pointer(pbby);
+            compact(pbx,pby);
+            if(pby->mask == 0) blist.unlink(pby);
+          }
+        }while(pbx->mask != full);
       }
+      pbbx = pbx->next_available;
+      blist.unlink_available(pbx);
+    }
+  }
+
+  void compact(block_pointer pbx, block_pointer pby)
+  {
+    auto c = (std::min)(
+      N - core::popcount(pbx->mask), core::popcount(pby->mask));
+    while(c--) {
+      auto n = detail::unchecked_countr_one(pbx->mask);
+      auto m = N - 1 - detail::unchecked_countl_zero(pby->mask);
+      allocator_construct(
+        al(), boost::to_address(pbx->data + n), std::move(pby->data[m]));
+      allocator_destroy(al(), boost::to_address(pby->data + m));
+      pbx->mask |= pbx->mask + 1;
+      pby->mask &= ~((mask_type)(1) << m);
+    }
+  }
+
+  void compact(block_pointer pb)
+  {
+    for(; ;) {
+      auto n = detail::unchecked_countr_one(pb->mask);
+      auto m = N - 1 - detail::unchecked_countl_zero(pb->mask);
+      if(n > m) return;
+      allocator_construct(
+        al(), boost::to_address(pb->data + n), std::move(pb->data[m]));
+      allocator_destroy(al(), boost::to_address(pb->data + m));
+      pb->mask |= pb->mask + 1;
+      pb->mask &= ~((mask_type)(1) << m);
     }
   }
 
