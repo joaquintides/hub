@@ -167,6 +167,29 @@ struct block_base
     return pointer_traits<const_pointer>::pointer_to(x);
   }
 
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+  BOOST_FORCEINLINE void link_available_before(pointer p) noexcept
+  {
+    next_available = p;
+    prev_available = p->prev_available;
+    next_available->prev_available = pointer_to(*this);
+    prev_available->next_available = pointer_to(*this);
+  }
+
+  BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
+  {
+    prev_available = p;
+    next_available = p->next_available;
+    next_available->prev_available = pointer_to(*this);
+    prev_available->next_available = pointer_to(*this);
+  }
+
+  BOOST_FORCEINLINE void unlink_available() noexcept
+  {
+    prev_available->next_available = next_available;
+    next_available->prev_available = prev_available;
+  }
+#else
   BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
   {
     next_available = p->next_available;
@@ -177,6 +200,7 @@ struct block_base
   {
     p->next_available = next_available;
   }
+#endif
 
   BOOST_FORCEINLINE void link_before(pointer p) noexcept
   {
@@ -192,7 +216,12 @@ struct block_base
     next->prev = prev;
   }
 
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+  pointer   prev_available,
+            next_available,
+#else
   pointer   next_available,
+#endif
             prev,
             next;
   mask_type mask;
@@ -222,6 +251,9 @@ struct block_list: block<ValuePointer>
   using block_pointer = pointer_rebind_t<ValuePointer, block>;
   using block::full;
   using block::pointer_to;
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+  using block::prev_available;
+#endif
   using block::next_available;
   using block::prev;
   using block::next;
@@ -245,9 +277,16 @@ struct block_list: block<ValuePointer>
   block_list(block_list&& x) noexcept: block_list{}
   {
     if(x.next_available != x.header()) {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+      prev_available = x.prev_available;
+      next_available = x.next_available;
+      next_available->prev_available = header();
+      prev_available->next_available = header();
+#else
       next_available = x.next_available;
       last_available = x.last_available;
       last_available->next_available = header();
+#endif
     }
     if(x.prev != x.header()) {
       prev = x.prev;
@@ -262,11 +301,18 @@ struct block_list: block<ValuePointer>
   {
     reset();
     if(x.next_available != x.header()) {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+      prev_available = x.prev_available;
+      next_available = x.next_available;
+      next_available->prev_available = header();
+      prev_available->next_available = header();
+#else
       next_available = x.next_available;
       last_available = x.last_available;
       last_available->next_available = header();
+#endif
     }
-    if(x.prev != pointer_to(x)) {
+    if(x.prev != x.header()) {
       prev = x.prev;
       next = x.next;
       next->prev = header();
@@ -278,10 +324,17 @@ struct block_list: block<ValuePointer>
 
   void reset() noexcept
   {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    prev_available = header();
+    next_available = header();
+    prev = header();
+    next = header();
+#else
     next_available = header();
     prev = header();
     next = header();
     last_available = header();
+#endif
   }
 
   block_base_pointer header() noexcept 
@@ -306,29 +359,47 @@ struct block_list: block<ValuePointer>
 
   BOOST_FORCEINLINE void link_available_at_back(block_pointer pb) noexcept 
   {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    pb->link_available_before(header());
+#else
     pb->link_available_after(last_available);
     last_available = pb;
+#endif
   }
 
   BOOST_FORCEINLINE void link_available_at_front(block_pointer pb) noexcept 
   {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    pb->link_available_after(header());
+#else
     if(last_available == header()) last_available = pb;
     pb->link_available_after(header());
+#endif
   }
 
   BOOST_FORCEINLINE void unlink_available(block_pointer pb) noexcept
   {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    pb->unlink_available();
+    BOOST_HUB_PREFETCH(next_available);
+#else
     BOOST_ASSERT(next_available == pb);
     pb->unlink_available_after(header());
     if(last_available == pb) last_available = header();
     BOOST_HUB_PREFETCH(next_available);
+#endif
   }
 
   BOOST_FORCEINLINE void unlink_available_after(
     block_pointer pb, block_base_pointer pbb_prev) noexcept
   {
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    (void)pbb_prev;
+    unlink_available(pb);
+#else
     pb->unlink_available_after(pbb_prev);
     if(last_available == pb) last_available = header();
+#endif
   }
 
   void purge_unavailable() noexcept
@@ -342,7 +413,9 @@ struct block_list: block<ValuePointer>
     }
   }
 
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
   block_base_pointer last_available;
+#endif
 };
 
 template<typename ValuePointer>
@@ -1458,12 +1531,15 @@ private:
     int  n = 0;
     if(first != last) {
       /* Consume active blocks.
-       * NB: we need to purge the available list after traversal cause
-       * unlink_available(pb) requires that pb be the first available block,
-       * which is generally not the case when pb has been reached through
-       * the _active_ list.
+       * NB: when the available list is foward only, we need to purge it after
+       * traversal cause unlink_available(pb) requires that pb be the first
+       * available block, which is generally not the case when pb has been
+       * reached through the _active_ list.
        */
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
       purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
+#endif
+
       for(; pbb != blist.header(); pbb = pbb->next, n = 0) {
         auto pb = static_cast_block_pointer(pbb);
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
@@ -1475,6 +1551,9 @@ private:
             ++size_;
             pb->mask |= bit;
           }
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+          if(pb->mask == full) blist.unlink_available(pb);
+#endif
           if(first == last) goto exit;
         }
       }
