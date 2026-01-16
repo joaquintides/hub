@@ -206,6 +206,13 @@ struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 };
 
 template<typename ValuePointer>
+void swap_payload(block<ValuePointer>& x, block<ValuePointer>& y) noexcept
+{
+  std::swap(x.mask, y.mask);
+  std::swap(x.data, y.data);
+}
+
+template<typename ValuePointer>
 struct block_list: block<ValuePointer>
 {
   using block = detail::block<ValuePointer>;
@@ -245,8 +252,8 @@ struct block_list: block<ValuePointer>
     if(x.prev != x.header()) {
       prev = x.prev;
       next = x.next;
-      next->prev = pointer_to(*this);
-      prev->next = pointer_to(*this);
+      next->prev = header();
+      prev->next = header();
     }
     x.reset();
   }
@@ -262,8 +269,8 @@ struct block_list: block<ValuePointer>
     if(x.prev != pointer_to(x)) {
       prev = x.prev;
       next = x.next;
-      next->prev = pointer_to(*this);
-      prev->next = pointer_to(*this);
+      next->prev = header();
+      prev->next = header();
     }
     x.reset();
     return *this;
@@ -271,9 +278,9 @@ struct block_list: block<ValuePointer>
 
   void reset() noexcept
   {
-    next_available = pointer_to(*this);
-    prev = pointer_to(*this);
-    next = pointer_to(*this);
+    next_available = header();
+    prev = header();
+    next = header();
     last_available = header();
   }
 
@@ -884,7 +891,7 @@ public:
 
   void reserve(size_type n)
   {
-    while(capacity() < n) (void)create_new_block();
+    while(capacity() < n) (void)create_new_available_block();
   }
 
   void shrink_to_fit()
@@ -1117,9 +1124,8 @@ public:
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
   {   
     std::less<const T*> less;
-    for(auto pbb = blist.next; pbb != blist.header(); ) {
+    for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb-> next) {
       auto pb = static_cast_block_pointer(pbb);
-      pbb = pbb-> next;
       if(!less(boost::to_address(p), boost::to_address(pb->data)) &&
           less(boost::to_address(p), boost::to_address(pb->data + N))) {
         return {pb, (int)(p - pb->data)};
@@ -1309,7 +1315,7 @@ private:
     return block_list::static_cast_block_pointer(pbb);
   }
 
-  block_pointer create_new_block()
+  block_pointer create_new_available_block()
   {
     struct deleter
     {
@@ -1319,15 +1325,15 @@ private:
     };
 
     std::unique_ptr<block, deleter> pb{allocator_allocate(al(), 1), {al()}}; 
+    pb->mask = 0;
     allocator_rebind_t<Allocator, value_type> val(al());
     pb->data = allocator_allocate(val, N);
-    pb->mask = 0;
     blist.link_available_at_back(pb.get());
     ++num_blocks;
     return pb.release();
   }
 
-  void delete_block(block_pointer pb)
+  void delete_block(block_pointer pb) noexcept
   {
     allocator_rebind_t<Allocator, value_type> val(al());
     allocator_deallocate(val, pb->data, N);
@@ -1343,7 +1349,7 @@ private:
     }
     else {
       n = 0;
-      return create_new_block();
+      return create_new_available_block();
     }
   }
 
@@ -1503,8 +1509,13 @@ private:
 
   void compact(block_pointer pbx, block_pointer pby)
   {
-    auto c = (std::min)(
-      N - core::popcount(pbx->mask), core::popcount(pby->mask));
+    auto cx = core::popcount(pbx->mask),
+         cy = core::popcount(pby->mask);
+    if(cx < cy) {
+      std::swap(cx, cy);
+      swap_payload(*pbx, *pby);
+    }
+    auto c = (std::min)(N - cx, cy);
     while(c--) {
       auto n = detail::unchecked_countr_one(pbx->mask);
       auto m = N - 1 - detail::unchecked_countl_zero(pby->mask);
