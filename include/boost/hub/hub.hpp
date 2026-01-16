@@ -445,8 +445,7 @@ public:
     typename Value2Pointer,
     typename = enable_if_consts_to_element_type_t<Value2Pointer>
   >
-  iterator(const iterator<Value2Pointer>& x) noexcept:
-    pbb{x.pbb}, n{x.n}, tail{x.tail} {}
+  iterator(const iterator<Value2Pointer>& x) noexcept: pbb{x.pbb}, n{x.n} {}
       
   iterator& operator=(const iterator& x) = default;
 
@@ -458,7 +457,6 @@ public:
   {
     pbb = x.pbb;
     n = x.n;
-    tail = x.tail;
     return *this;
   }
 
@@ -486,14 +484,13 @@ public:
     }
     return *this;
 #else
-    auto mask = pbb->mask & tail;
+    auto mask = pbb->mask & (full << n << 1);
     if(BOOST_UNLIKELY(mask == 0)) {
       pbb = pbb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
       mask = pbb->mask;
     }
     n = detail::unchecked_countr_zero(mask);
-    tail = full << n << 1;
     return *this;
 #endif
   }
@@ -516,7 +513,6 @@ public:
       BOOST_HUB_PREFETCH_BLOCK(pbb->prev, block);
       n = N - 1 - detail::unchecked_countl_zero(pbb->mask);
     }
-    tail = full << n << 1;
     return *this;
   }
 
@@ -568,7 +564,6 @@ private:
 
   block_base_pointer pbb = nullptr;
   int                n = 0;
-  mask_type          tail = full << n << 1;
 };
 
 template<typename T, std::size_t N>
