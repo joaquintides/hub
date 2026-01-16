@@ -18,13 +18,13 @@
 #include <boost/core/empty_value.hpp>
 #include <boost/core/pointer_traits.hpp>
 #include <boost/hub/hub_fwd.hpp>
-#include <boost/smart_ptr/allocate_unique.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -1112,12 +1112,22 @@ public:
     if(size_ > 1) {
       /* compact elements and build an array of pointers to data chunks */
       compact();
-      auto p = allocate_unique_noinit<T*[]>(al(), (size_ + N - 1) / N);
-      std::size_t n = 0;
+
+      struct deleter
+      {
+        using pointer = T**;
+        void operator()(pointer p) noexcept { ::operator delete(p); }
+      };
+      std::size_t n = (std::size_t)((size_ + N - 1) / N);
+      std::unique_ptr<T*[], deleter> p
+        {static_cast<T**>(::operator new(n * sizeof(T*)))};
+      std::size_t i = 0;
       for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
-        p[n++] = boost::to_address(static_cast_block_pointer(pbb)->data);
+        p[i++] = boost::to_address(static_cast_block_pointer(pbb)->data);
       }
-      std::sort(sort_iterator{&p[0], 0}, sort_iterator{&p[0], size_}, comp);
+
+      std::sort(
+        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
     }
   }
 
@@ -1252,7 +1262,7 @@ private:
   };
 
   hub(
-    hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept: 
+    hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept:
     allocator_base{empty_init, al_}, blist{std::move(x.blist)},
     num_blocks{x.num_blocks}, size_{x.size_}
   {

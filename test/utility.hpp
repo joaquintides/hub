@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <new>
 #include <vector>
 #include <type_traits>
 

@@ -1,4 +1,4 @@
-# Copyright 2025 Joaquín M López Muñoz.
+# Copyright 2025-2026 Joaquín M López Muñoz.
 # Distributed under the Boost Software License, Version 1.0.
 # (See accompanying file LICENSE_1_0.txt or copy at
 # http://www.boost.org/LICENSE_1_0.txt)
@@ -9,7 +9,6 @@ constant boost_dependencies :
     /boost/assert//boost_assert
     /boost/config//boost_config
     /boost/core//boost_core
-    /boost/smart_ptr//boost_smart_ptr
     ;
 
 project /boost/hub ;
