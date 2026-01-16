@@ -381,7 +381,6 @@ struct block_list: block<ValuePointer>
   {
 #if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
     pb->unlink_available();
-    BOOST_HUB_PREFETCH(next_available);
 #else
     BOOST_ASSERT(next_available == pb);
     pb->unlink_available_after(header());
@@ -402,6 +401,7 @@ struct block_list: block<ValuePointer>
 #endif
   }
 
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
   void purge_unavailable() noexcept
   {
     for(auto pbb_prev = header(), pbb = pbb_prev->next_available;
@@ -412,6 +412,7 @@ struct block_list: block<ValuePointer>
       else pbb_prev = pb;
     }
   }
+#endif
 
 #if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
   block_base_pointer last_available;
@@ -444,7 +445,8 @@ public:
     typename Value2Pointer,
     typename = enable_if_consts_to_element_type_t<Value2Pointer>
   >
-  iterator(const iterator<Value2Pointer>& x) noexcept: pbb{x.pbb}, n{x.n} {}
+  iterator(const iterator<Value2Pointer>& x) noexcept:
+    pbb{x.pbb}, n{x.n}, tail{x.tail} {}
       
   iterator& operator=(const iterator& x) = default;
 
@@ -456,6 +458,7 @@ public:
   {
     pbb = x.pbb;
     n = x.n;
+    tail = x.tail;
     return *this;
   }
 
@@ -471,6 +474,7 @@ public:
 
   BOOST_FORCEINLINE iterator& operator++() noexcept
   {
+#if 0
     auto mask = (pbb->mask >> n) - 1;
     if(BOOST_LIKELY(mask != 0)) {
       n += detail::unchecked_countr_zero(mask);
@@ -481,6 +485,17 @@ public:
       n = detail::unchecked_countr_zero(pbb->mask);
     }
     return *this;
+#else
+    auto mask = pbb->mask & tail;
+    if(BOOST_UNLIKELY(mask == 0)) {
+      pbb = pbb->next;
+      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
+      mask = pbb->mask;
+    }
+    n = detail::unchecked_countr_zero(mask);
+    tail = full << n << 1;
+    return *this;
+#endif
   }
 
   BOOST_FORCEINLINE iterator operator++(int) noexcept
@@ -501,6 +516,7 @@ public:
       BOOST_HUB_PREFETCH_BLOCK(pbb->prev, block);
       n = N - 1 - detail::unchecked_countl_zero(pbb->mask);
     }
+    tail = full << n << 1;
     return *this;
   }
 
@@ -534,6 +550,7 @@ private:
   using mask_type = typename block_base::mask_type;
 
   static constexpr int N = block_base::N;
+  static constexpr mask_type full = block_base::full;
 
   iterator(const_block_base_pointer pbb_, int n_) noexcept:
     pbb{const_cast_block_base_pointer(pbb_)}, n{n_} {}
@@ -551,6 +568,7 @@ private:
 
   block_base_pointer pbb = nullptr;
   int                n = 0;
+  mask_type          tail = full << n << 1;
 };
 
 template<typename T, std::size_t N>
@@ -1327,12 +1345,14 @@ private:
     hub& x;
   };
 
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
   struct purge_unavailable_on_exit
   {
     ~purge_unavailable_on_exit() { x.blist.purge_unavailable(); }
 
     hub& x;
   };
+#endif
 
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept:
