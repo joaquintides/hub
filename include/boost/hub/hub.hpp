@@ -681,6 +681,28 @@ struct sort_iterator
 };
 
 template<typename T>
+struct nodtor_deleter
+{
+  using pointer = T*;
+  void operator()(pointer p) noexcept { ::operator delete(p); }
+};
+
+template<typename T>
+struct nodtor_unique_ptr_impl
+{
+  using type = std::unique_ptr<T, nodtor_deleter<T>>;
+};
+
+template<typename T>
+struct nodtor_unique_ptr_impl<T[]>
+{
+  using type = std::unique_ptr<T[], nodtor_deleter<T>>;
+};
+
+template<typename T>
+using nodtor_unique_ptr = typename nodtor_unique_ptr_impl<T>::type;
+
+template<typename T>
 struct type_identity { using type = T; };
 
 template<typename T>
@@ -1179,19 +1201,14 @@ public:
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
   {
-    struct deleter
-    {
-      using pointer = T**;
-      void operator()(pointer p) noexcept { ::operator delete(p); }
-    };
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
-      /* compact elements and build an array of pointers to data chunks */
+      /* compact elements and build an array of pointers to data chunks of N */
       compact();
 
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
-      std::unique_ptr<T*[], deleter> p
+      detail::nodtor_unique_ptr<T*[]> p
         {static_cast<T**>(::operator new(n * sizeof(T*)))};
       std::size_t i = 0;
       for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
@@ -1214,21 +1231,24 @@ public:
     };
 
     if(size_ > 1) {
-      std::unique_ptr<proxy[]> p
+      /* sort an array of (pointer, index) pairs and relocate according to it */
+      detail::nodtor_unique_ptr<proxy[]> p
         {static_cast<proxy*>(::operator new[](sizeof(proxy) * size_))};
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
         ++i;
       });
+
       std::sort(&p[0], &p[0] + size_, [&] (const proxy& x, const proxy& y) { 
         return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
       });
+
       i = 0;
       for(; i < size_; ++i) {
         if(p[i].n != i) {
-          value_type x = std::move(*(p[i].p));
-          auto       j = i;
+          T    x = std::move(*(p[i].p));
+          auto j = i;
           do {
             auto k = p[j].n;
             *(p[j].p) = std::move(*p[k].p);
@@ -1245,6 +1265,7 @@ public:
   template<typename Compare = std::less<T>>
   void sort3(Compare comp = Compare())
   {
+    /* transfer to a vector, sort and transfer back */
     std::vector<T, Allocator> v(al());
     v.reserve(size_);
     visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
@@ -1256,6 +1277,7 @@ public:
   template<typename Compare = std::less<T>>
   void sort4(Compare comp = Compare())
   {
+    /* transfer to a vector, sort and transfer back */
     std::vector<T, Allocator> v(al());
     v.reserve(size_);
     erase_if(*this, [&] (const value_type& x) { 
