@@ -1233,7 +1233,7 @@ public:
     if(size_ > 1) {
       /* sort an array of (pointer, index) pairs and relocate according to it */
       detail::nodtor_unique_ptr<proxy[]> p
-        {static_cast<proxy*>(::operator new[](sizeof(proxy) * size_))};
+        {static_cast<proxy*>(::operator new(sizeof(proxy) * size_))};
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
