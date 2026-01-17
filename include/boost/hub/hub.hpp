@@ -472,19 +472,7 @@ public:
 
   BOOST_FORCEINLINE iterator& operator++() noexcept
   {
-#if 0
-    auto mask = (pbb->mask >> n) - 1;
-    if(BOOST_LIKELY(mask != 0)) {
-      n += detail::unchecked_countr_zero(mask);
-    }
-    else {
-      pbb = pbb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
-      n = detail::unchecked_countr_zero(pbb->mask);
-    }
-    return *this;
-#else
-    auto mask = pbb->mask & (full << n << 1);
+    auto mask = pbb->mask & (full << 1 << n);
     if(BOOST_UNLIKELY(mask == 0)) {
       pbb = pbb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
@@ -492,7 +480,6 @@ public:
     }
     n = detail::unchecked_countr_zero(mask);
     return *this;
-#endif
   }
 
   BOOST_FORCEINLINE iterator operator++(int) noexcept
@@ -504,15 +491,13 @@ public:
 
   BOOST_FORCEINLINE iterator& operator--() noexcept
   {
-    auto mask = (pbb->mask << (N - 1 - n)) - ((mask_type)1 << (N - 1));
-    if(BOOST_LIKELY(mask != 0)) {
-      n -= detail::unchecked_countl_zero(mask);
-    }
-    else {
+    auto mask = pbb->mask & (full >> 1 >> (N - 1 - n));
+    if(BOOST_UNLIKELY(mask == 0)) {
       pbb = pbb->prev;
       BOOST_HUB_PREFETCH_BLOCK(pbb->prev, block);
-      n = N - 1 - detail::unchecked_countl_zero(pbb->mask);
+      mask = pbb->mask;
     }
+    n = N - 1 - detail::unchecked_countl_zero(mask);
     return *this;
   }
 
@@ -584,7 +569,7 @@ struct sort_iterator
 
   reference operator*() const noexcept
   {
-    return *(operator->());
+    return *operator->();
   }
 
   sort_iterator& operator++() noexcept
@@ -1083,7 +1068,7 @@ public:
   {
     auto pb = static_cast_block_pointer(pos.pbb);
     auto n = pos.n;
-    allocator_destroy(al(), pb->data + n);
+    allocator_destroy(al(), boost::to_address(pb->data + n));
     auto bit = (mask_type)(1) << n;
     if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
     else if(BOOST_UNLIKELY(pb->mask == bit)) blist.unlink(pb);
@@ -1211,6 +1196,7 @@ public:
       for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
         p[i++] = boost::to_address(static_cast_block_pointer(pbb)->data);
       }
+      BOOST_ASSERT(i == n);
 
       std::sort(
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
@@ -1440,7 +1426,7 @@ private:
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
-    if(blist.next_available != blist.header()){
+    if(BOOST_LIKELY(blist.next_available != blist.header())){
       auto pb = static_cast_block_pointer(blist.next_available);
       n = detail::unchecked_countr_one(pb->mask);
       return pb;
