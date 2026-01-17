@@ -1565,10 +1565,10 @@ private:
             construct(boost::to_address(pb->data + n), first++);
             ++size_;
             pb->mask |= bit;
-          }
 #if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
-          if(pb->mask == full) blist.unlink_available(pb);
+            if(pb->mask == full) blist.unlink_available(pb);
 #endif
+          }
           if(first == last) goto exit;
         }
       }
