@@ -27,6 +27,7 @@
 #include <new>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #if defined(BOOST_NO_CXX20_HDR_CONCEPTS) || defined(BOOST_NO_CXX20_HDR_RANGES)
 #define BOOST_HUB_NO_RANGES
@@ -1178,17 +1179,17 @@ public:
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
   {
+    struct deleter
+    {
+      using pointer = T**;
+      void operator()(pointer p) noexcept { ::operator delete(p); }
+    };
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
       /* compact elements and build an array of pointers to data chunks */
       compact();
 
-      struct deleter
-      {
-        using pointer = T**;
-        void operator()(pointer p) noexcept { ::operator delete(p); }
-      };
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
       std::unique_ptr<T*[], deleter> p
         {static_cast<T**>(::operator new(n * sizeof(T*)))};
@@ -1201,6 +1202,69 @@ public:
       std::sort(
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
     }
+  }
+
+  template<typename Compare = std::less<T>>
+  void sort2(Compare comp = Compare())
+  {
+    struct proxy
+    {
+      T*        p;
+      size_type n;
+    };
+
+    if(size_ > 1) {
+      std::unique_ptr<proxy[]> p
+        {static_cast<proxy*>(::operator new[](sizeof(proxy) * size_))};
+      size_type i = 0;
+      visit_all([&] (value_type& x) {
+        p[i] = {std::addressof(x), i};
+        ++i;
+      });
+      std::sort(&p[0], &p[0] + size_, [&] (const proxy& x, const proxy& y) { 
+        return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
+      });
+      i = 0;
+      for(; i < size_; ++i) {
+        if(p[i].n != i) {
+          value_type x = std::move(*(p[i].p));
+          auto       j = i;
+          do {
+            auto k = p[j].n;
+            *(p[j].p) = std::move(*p[k].p);
+            p[j].n = j;
+            j = k;
+          } while(p[j].n != i);
+          *(p[j].p) = std::move(x);
+          p[j].n = j;
+        }
+      }
+    }
+  }
+
+  template<typename Compare = std::less<T>>
+  void sort3(Compare comp = Compare())
+  {
+    std::vector<T, Allocator> v(al());
+    v.reserve(size_);
+    visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
+    std::sort(v.begin(), v.end(), comp);
+    size_type i = 0;
+    visit_all([&] (value_type& x) { x = std::move(v[i++]); });
+  }
+
+  template<typename Compare = std::less<T>>
+  void sort4(Compare comp = Compare())
+  {
+    std::vector<T, Allocator> v(al());
+    v.reserve(size_);
+    erase_if(*this, [&] (const value_type& x) { 
+      v.push_back(std::move(const_cast<value_type&>(x)));
+      return true;
+    });
+    std::sort(v.begin(), v.end(), comp);
+    insert(
+      std::make_move_iterator(v.begin()), std::make_move_iterator(v.end()));
   }
 
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
