@@ -688,19 +688,14 @@ struct nodtor_deleter
 };
 
 template<typename T>
-struct nodtor_unique_ptr_impl
+struct nodtor_deleter<T[]>
 {
-  using type = std::unique_ptr<T, nodtor_deleter<T>>;
+  using pointer = T*;
+  void operator()(pointer p) noexcept { ::operator delete[](p); }
 };
 
 template<typename T>
-struct nodtor_unique_ptr_impl<T[]>
-{
-  using type = std::unique_ptr<T[], nodtor_deleter<T>>;
-};
-
-template<typename T>
-using nodtor_unique_ptr = typename nodtor_unique_ptr_impl<T>::type;
+using nodtor_unique_ptr = std::unique_ptr<T, nodtor_deleter<T>>;
 
 template<typename T>
 struct type_identity { using type = T; };
@@ -1209,7 +1204,7 @@ public:
 
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
       detail::nodtor_unique_ptr<T*[]> p
-        {static_cast<T**>(::operator new(n * sizeof(T*)))};
+        {static_cast<T**>(::operator new[](n * sizeof(T*)))};
       std::size_t i = 0;
       for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
         p[i++] = boost::to_address(static_cast_block_pointer(pbb)->data);
@@ -1233,7 +1228,7 @@ public:
     if(size_ > 1) {
       /* sort an array of (pointer, index) pairs and relocate according to it */
       detail::nodtor_unique_ptr<proxy[]> p
-        {static_cast<proxy*>(::operator new(sizeof(proxy) * size_))};
+        {static_cast<proxy*>(::operator new[](size_ * sizeof(proxy)))};
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
