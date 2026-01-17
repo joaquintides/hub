@@ -18,6 +18,7 @@
 #include <boost/core/empty_value.hpp>
 #include <boost/core/pointer_traits.hpp>
 #include <boost/hub/hub_fwd.hpp>
+#include <boost/smart_ptr/allocate_unique.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -1203,16 +1204,24 @@ public:
       compact();
 
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
+#if 1
+      auto p = allocate_unique_noinit<T*[]>(al(), (size_ + N - 1) / N);
+#else
       detail::nodtor_unique_ptr<T*[]> p
         {static_cast<T**>(::operator new[](n * sizeof(T*)))};
+#endif
       std::size_t i = 0;
       for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
         p[i++] = boost::to_address(static_cast_block_pointer(pbb)->data);
       }
       BOOST_ASSERT(i == n);
 
+#if 1
+      std::sort(sort_iterator{&p[0], 0}, sort_iterator{&p[0], size_}, comp);
+#else
       std::sort(
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
+#endif
     }
   }
 
@@ -1227,8 +1236,12 @@ public:
 
     if(size_ > 1) {
       /* sort an array of (pointer, index) pairs and relocate according to it */
+#if 1
+      auto p = allocate_unique_noinit<proxy[]>(al(), size_);
+#else
       detail::nodtor_unique_ptr<proxy[]> p
         {static_cast<proxy*>(::operator new[](size_ * sizeof(proxy)))};
+#endif
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
