@@ -1236,7 +1236,7 @@ public:
       });
 
       std::sort(
-        p.get(), p.get() + size_,[&] (const proxy& x, const proxy& y) {
+        p.get(), p.get() + size_, [&] (const proxy& x, const proxy& y) {
           return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
         });
 
@@ -1613,13 +1613,13 @@ private:
     auto pbb = blist.next;
     int  n = 0;
     if(first != last) {
-      /* Consume active blocks.
-       * NB: when the available list is foward only, we need to purge it after
+      /* consume active blocks */
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+      /* When the available list is foward only, we need to purge it after
        * traversal cause unlink_available(pb) requires that pb be the first
        * available block, which is generally not the case when pb has been
        * reached through the _active_ list.
        */
-#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
       purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
 #endif
 
@@ -1655,6 +1655,14 @@ private:
 
   void compact()
   {
+#if !defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
+    /* When the available list is forward only, we need to purge it after
+     * traversal cause unlink_available(pb) requires that pb be the first
+     * available block, which is generally not the case because we skip
+     * available, empty blocks.
+     */
+     purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
+#endif
     for(auto pbbx = blist.next_available; pbbx != blist.header(); ) {
       auto pbx = static_cast_block_pointer(pbbx);
       auto pbby = pbbx->next_available;
@@ -1673,7 +1681,9 @@ private:
             if(pby->mask == 0) blist.unlink(pby);
           }
         }while(pbx->mask != full);
+#if defined(BOOST_HUB_ENABLE_BIDIRECTIONAL_AVAILABLE_LIST)
         blist.unlink_available(pbx);
+#endif
       }
       pbbx = pbby;
     }
