@@ -16,6 +16,7 @@
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/bit.hpp>
 #include <boost/core/empty_value.hpp>
+#include <boost/core/no_exceptions_support.hpp>
 #include <boost/core/pointer_traits.hpp>
 #include <boost/hub/hub_fwd.hpp>
 #include <cstddef>
@@ -25,6 +26,7 @@
 #include <iterator>
 #include <memory>
 #include <new>
+#include <scoped_allocator>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -1019,8 +1021,16 @@ public:
     allocator_construct(
       al(), boost::to_address(pb->data + n), std::forward<Args>(args)...);
     pb->mask |= pb->mask + 1;
+#if 1
+    if(BOOST_UNLIKELY(pb->mask + 1 <= 2)) {
+      /* pb->mask == 0 (impossible), 1 or full */
+      if(pb->mask == 1) blist.link_at_back(pb);
+      else /* pb->mask == full */  blist.unlink_available(pb);
+    }
+#else
     if(BOOST_UNLIKELY(pb->mask == 1)) blist.link_at_back(pb);
     else if(BOOST_UNLIKELY(pb->mask == full)) blist.unlink_available(pb);
+#endif
     ++size_;
     return {pb, n};
   }
@@ -1262,7 +1272,9 @@ public:
   void sort3(Compare comp = Compare())
   {
     /* transfer to a vector, sort and transfer back */
-    std::vector<T, Allocator> v(al());
+    using vector = std::vector<
+      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
+    vector v(typename vector::allocator_type{std::allocator<T>{}, al()});
     v.reserve(size_);
     visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
     std::sort(v.begin(), v.end(), comp);
@@ -1273,8 +1285,10 @@ public:
   template<typename Compare = std::less<T>>
   void sort4(Compare comp = Compare())
   {
-    /* transfer to a vector, sort and transfer back */
-    std::vector<T, Allocator> v(al());
+    /* destructively transfer to a vector, sort and insert back */
+    using vector = std::vector<
+      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
+    vector v(typename vector::allocator_type{std::allocator<T>{}, al()});
     v.reserve(size_);
     erase_if(*this, [&] (const value_type& x) { 
       v.push_back(std::move(const_cast<value_type&>(x)));
@@ -1483,6 +1497,22 @@ private:
 
   block_pointer create_new_available_block()
   {
+#if 1
+    auto pb = allocator_allocate(al(), 1);
+    pb->mask = 0;
+    BOOST_TRY {
+      allocator_rebind_t<Allocator, value_type> val(al());
+      pb->data = allocator_allocate(val, N);
+    }
+    BOOST_CATCH(...) {
+      allocator_deallocate(al(), pb, 1);
+      BOOST_RETHROW;
+    }
+    BOOST_CATCH_END
+    blist.link_available_at_back(pb);
+    ++num_blocks;
+    return pb;
+#else
     struct deleter
     {
       using pointer = block_pointer;
@@ -1497,6 +1527,7 @@ private:
     blist.link_available_at_back(pb.get());
     ++num_blocks;
     return pb.release();
+#endif
   }
 
   void delete_block(block_pointer pb) noexcept
