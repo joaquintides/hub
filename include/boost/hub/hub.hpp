@@ -1080,28 +1080,16 @@ public:
 
   BOOST_FORCEINLINE iterator erase(const_iterator pos)
   {
-    auto pb = static_cast_block_pointer(pos.pbb);
+    auto pbb = pos.pbb;
     auto n = pos.n;
     ++pos;
-    allocator_destroy(al(), boost::to_address(pb->data + n));
-    auto bit = (mask_type)(1) << n;
-    if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
-    else if(BOOST_UNLIKELY(pb->mask == bit)) blist.unlink(pb);
-    pb->mask &= ~bit;
-    --size_;
+    erase_impl(pbb, n);
     return {pos.pbb, pos.n};
   }
 
   BOOST_FORCEINLINE void erase_void(const_iterator pos)
   {
-    auto pb = static_cast_block_pointer(pos.pbb);
-    auto n = pos.n;
-    allocator_destroy(al(), boost::to_address(pb->data + n));
-    auto bit = (mask_type)(1) << n;
-    if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
-    else if(BOOST_UNLIKELY(pb->mask == bit)) blist.unlink(pb);
-    pb->mask &= ~bit;
-    --size_;
+    erase_impl(pos.pbb, pos.n);
   }
 
   iterator erase(const_iterator first, const_iterator last)
@@ -1397,6 +1385,9 @@ public:
   }
 
 private:
+  template<typename U, typename A, typename P>
+  friend typename hub<U, A>::size_type erase_if(hub<U, A>&, P);
+
   using block_typedefs = detail::block_typedefs<Allocator>;
   using block_base = typename block_typedefs::block_base;
   using block_base_pointer = typename block_typedefs::block_base_pointer;
@@ -1612,6 +1603,17 @@ private:
     size_ = 0;
   }
 
+  BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
+  {
+    auto pb = static_cast_block_pointer(pbb);
+    allocator_destroy(al(), boost::to_address(pb->data + n));
+    auto bit = (mask_type)(1) << n;
+    if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
+    else if(BOOST_UNLIKELY(pb->mask == bit)) blist.unlink(pb);
+    pb->mask &= ~bit;
+    --size_;
+  }
+
   template<typename Incrementable, typename Sentinel, typename Construct>
   void range_insert_impl(
     Incrementable first, Sentinel last, Construct construct)
@@ -1790,16 +1792,23 @@ template<typename T, typename Allocator, typename Predicate>
 typename hub<T, Allocator>::size_type
 erase_if(hub<T, Allocator>& x, Predicate pred)
 {
-  using size_type = typename hub<T, Allocator>::size_type;
-  
-  auto s = x.size();
-  auto first = x.cbegin(), last = x.cend();
-  while((first = std::find_if(first, last, pred)) != last) {
-    first = x.erase(first, std::find_if_not(std::next(first), last, pred));
-    if(first == last) break;
-    ++first;
+  using hub_container = hub<T, Allocator>;
+  using size_type = typename hub_container::size_type;
+  using block = typename hub_container::block;
+
+  auto s = x.size_;
+  for(auto pbb = x.blist.next; pbb != x.blist.header(); ) {
+    auto pb = x.static_cast_block_pointer(pbb);
+    pbb = pb->next;
+    BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+    auto mask = pb->mask;
+    do {
+      auto n = detail::unchecked_countr_zero(mask);
+      if(pred(pb->data[n])) x.erase_impl(pb, n);
+      mask &= mask - 1;
+    } while(mask);
   }
-  return (size_type)(s - x.size());
+  return (size_type)(s - x.size_);
 }
 
 template<typename T, typename Allocator, typename U>
