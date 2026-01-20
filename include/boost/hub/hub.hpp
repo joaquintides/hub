@@ -1257,7 +1257,8 @@ public:
     /* transfer to a vector, sort and transfer back */
     using vector = std::vector<
       T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
-    vector v(typename vector::allocator_type{std::allocator<T>{}, al()});
+    vector v(
+      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
     v.reserve(size_);
     visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
     std::sort(v.begin(), v.end(), comp);
@@ -1271,7 +1272,8 @@ public:
     /* destructively transfer to a vector, sort and insert back */
     using vector = std::vector<
       T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
-    vector v(typename vector::allocator_type{std::allocator<T>{}, al()});
+    vector v(
+      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
     v.reserve(size_);
     erase_if(*this, [&] (const value_type& x) { 
       v.push_back(std::move(const_cast<value_type&>(x)));
