@@ -976,9 +976,22 @@ public:
 
   bool      empty() const noexcept { return size_ == 0; }
   size_type size() const noexcept { return size_; }
-  size_type max_size() const noexcept { return allocator_max_size(al()) * N;}
+
+  size_type max_size() const noexcept 
+  {
+    std::size_t
+      bs = (std::size_t)allocator_max_size(al()) * sizeof(block),
+      vs = (std::size_t)allocator_max_size(Allocator(al())) * sizeof(T);
+    return 
+      (size_type)((std::min)(bs, vs) / (sizeof(block) + sizeof(T) * N) * N);
+  }
+  
   size_type capacity() const noexcept { return num_blocks * N; }
-  size_type memory() const noexcept { return num_blocks * (sizeof(block) + sizeof(value_type) * N); }
+
+  size_type memory() const noexcept // TODO: remove
+  { 
+    return num_blocks * (sizeof(block) + sizeof(T) * N); 
+  }
 
   void reserve(size_type n)
   {
@@ -1337,7 +1350,7 @@ public:
         auto mask = pb->mask;
         do {
           auto n = detail::unchecked_countr_zero(mask);
-          if(!f(pb->data[n])) return {pbb, n};
+          if(!f(pb->data[n])) return {pb, n};
           mask &= mask - 1;
         } while(mask);
       } while(pbb != last.pbb);
