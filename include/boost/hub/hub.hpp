@@ -1562,7 +1562,9 @@ private:
     for(auto pbb = blist.next_available; pbb != blist.header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next_available;
-      BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+      BOOST_IF_CONSTEXPR(!std::is_trivially_destructible<T>::value) {
+        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+      }
       if(pb->mask != 0) {
         destroy_all_in_nonempty_block(pb);
         blist.unlink(pb);
@@ -1574,7 +1576,9 @@ private:
       BOOST_ASSERT(pbb->mask == full);
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+      BOOST_IF_CONSTEXPR(!std::is_trivially_destructible<T>::value) {
+        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+      }
       destroy_all_in_full_block(pb);
       delete_block(pb);
     }
@@ -1587,10 +1591,9 @@ private:
   {
     auto pb = static_cast_block_pointer(pbb);
     allocator_destroy(al(), boost::to_address(pb->data + n));
-    auto bit = (mask_type)(1) << n;
     if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
-    else if(BOOST_UNLIKELY(pb->mask == bit)) blist.unlink(pb);
-    pb->mask &= ~bit;
+    pb->mask &= ~((mask_type)(1) << n);
+    if(BOOST_UNLIKELY(pb->mask == 0)) blist.unlink(pb);
     --size_;
   }
 
