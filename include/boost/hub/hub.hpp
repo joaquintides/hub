@@ -1345,14 +1345,15 @@ public:
     if(pbb != last.pbb){
       do {
         auto pb = static_cast_block_pointer(pbb);
-        pbb = pb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+        //pbb = pb->next;
+        //BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
         auto mask = pb->mask;
         do {
           auto n = detail::unchecked_countr_zero(mask);
           if(!f(pb->data[n])) return {pb, n};
           mask &= mask - 1;
         } while(mask);
+        pbb = pb->next;
       } while(pbb != last.pbb);
       first = {pbb};
     }
