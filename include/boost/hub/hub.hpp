@@ -100,11 +100,16 @@ _mm_prefetch((const char*)boost::to_address(p), _MM_HINT_T0)
 #define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
 BOOST_HUB_PREFETCH(pbb)
 #else
+#if 1
+#define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
+BOOST_HUB_PREFETCH(pbb)
+#else
 #define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
 do{                                          \
   auto p0 = &static_cast<Block&>(*(pbb));    \
   BOOST_HUB_PREFETCH(p0->data());            \
 } while(0)
+#endif
 #endif
 
 #if defined(BOOST_MSVC)
