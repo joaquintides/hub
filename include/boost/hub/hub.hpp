@@ -100,16 +100,11 @@ _mm_prefetch((const char*)boost::to_address(p), _MM_HINT_T0)
 #define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
 BOOST_HUB_PREFETCH(pbb)
 #else
-#if 1
-#define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
-BOOST_HUB_PREFETCH(pbb)
-#else
 #define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
 do{                                          \
   auto p0 = &static_cast<Block&>(*(pbb));    \
   BOOST_HUB_PREFETCH(p0->data());            \
 } while(0)
-#endif
 #endif
 
 #if defined(BOOST_MSVC)
@@ -1403,6 +1398,35 @@ public:
     }
     auto pbb = first.pbb;
     if(pbb != last.pbb){
+#if 1
+      auto           pb = static_cast_block_pointer(pbb);
+      auto           mask = pb->mask;
+      auto           n = detail::unchecked_countr_zero(mask);
+      auto           pd = pb->data();
+      decltype(mask) next_mask;
+      decltype(n)    next_n;
+      decltype(pd)   next_pd;
+      goto start;
+      while(pb != last.pbb) {
+        for(; ; ) {
+          if(!f(pd[n])) return {pb, n};
+          mask &= mask - 1;
+          if(!mask) break;
+          n = detail::unchecked_countr_zero(mask);
+        }
+        pb = static_cast_block_pointer(pbb);
+        mask = next_mask;
+        n = next_n;
+        pd = next_pd;
+      start:
+        pbb = pb->next;
+        next_mask = pbb->mask;
+        next_n = detail::unchecked_countr_zero(next_mask);
+        next_pd = static_cast_block_pointer(pbb)->data();
+        BOOST_HUB_PREFETCH(next_pd + next_n);
+      }
+      first = {pb};
+#else
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
@@ -1415,6 +1439,7 @@ public:
         } while(mask);
       } while(pbb != last.pbb);
       first = {pbb};
+#endif
     }
     for(; first != last; ++first) if(!f(*first)) return first;
     return first;
