@@ -1414,6 +1414,7 @@ public:
           if(!mask) break;
           n = detail::unchecked_countr_zero(mask);
         }
+        BOOST_HUB_PREFETCH(next_pd + next_n);
         pb = static_cast_block_pointer(pbb);
         mask = next_mask;
         n = next_n;
@@ -1423,7 +1424,7 @@ public:
         next_mask = pbb->mask;
         next_n = detail::unchecked_countr_zero(next_mask);
         next_pd = static_cast_block_pointer(pbb)->data();
-        BOOST_HUB_PREFETCH(next_pd + next_n);
+        BOOST_HUB_PREFETCH(pbb->next);
       }
       first = {pb};
 #else
