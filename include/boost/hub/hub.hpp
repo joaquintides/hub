@@ -1398,7 +1398,7 @@ public:
     }
     auto pbb = first.pbb;
     if(pbb != last.pbb){
-#if 0
+#if 1
       auto           pb = static_cast_block_pointer(pbb);
       auto           mask = pb->mask;
       auto           n = detail::unchecked_countr_zero(mask);
