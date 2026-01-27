@@ -1396,52 +1396,8 @@ public:
       ++first;
       if(first.pbb != pbb) break;
     }
-    auto pbb = first.pbb;
-    if(pbb != last.pbb){
-#if 1
-      auto           pb = static_cast_block_pointer(pbb);
-      auto           mask = pb->mask;
-      auto           n = detail::unchecked_countr_zero(mask);
-      auto           pd = pb->data();
-      decltype(mask) next_mask;
-      decltype(n)    next_n;
-      decltype(pd)   next_pd;
-      goto start;
-      while(pb != last.pbb) {
-        for(; ; ) {
-          if(!f(pd[n])) return {pb, n};
-          mask &= mask - 1;
-          if(!mask) break;
-          n = detail::unchecked_countr_zero(mask);
-        }
-        pb = static_cast_block_pointer(pbb);
-        mask = next_mask;
-        n = next_n;
-        pd = next_pd;
-      start:
-        pbb = pb->next;
-        next_mask = pbb->mask;
-        next_n = detail::unchecked_countr_zero(next_mask);
-        next_pd = static_cast_block_pointer(pbb)->data();
-        BOOST_HUB_PREFETCH(next_pd + next_n);
-        BOOST_HUB_PREFETCH(pbb->next);
-      }
-      first = {pb};
-#else
-      do {
-        auto pb = static_cast_block_pointer(pbb);
-        pbb = pb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
-        auto mask = pb->mask;
-        do {
-          auto n = detail::unchecked_countr_zero(mask);
-          if(!f(pb->data()[n])) return {pb, n};
-          mask &= mask - 1;
-        } while(mask);
-      } while(pbb != last.pbb);
-      first = {pbb};
-#endif
-    }
+    first = visit_while_impl(first.pbb, last.pbb, f);
+    if(first.pbb != last.pbb) return first;
     for(; first != last; ++first) if(!f(*first)) return first;
     return first;
   }
@@ -1854,6 +1810,54 @@ private:
       pb->mask |= pb->mask + 1;
       pb->mask &= ~((mask_type)(1) << m);
     }
+  }
+
+  template<typename F>
+  iterator visit_while_impl(
+    block_base_pointer pbb, block_base_pointer last_pbb, F&& f)
+  {
+#if 1
+    auto           pb = static_cast_block_pointer(pbb);
+    auto           mask = pb->mask;
+    auto           n = detail::unchecked_countr_zero(mask);
+    auto           pd = pb->data();
+    decltype(mask) next_mask;
+    decltype(n)    next_n;
+    decltype(pd)   next_pd;
+    goto start;
+    while(pb != last_pbb) {
+      for(; ; ) {
+        if(!f(pd[n])) return {pb, n};
+        mask &= mask - 1;
+        if(!mask) break;
+        n = detail::unchecked_countr_zero(mask);
+      }
+      pb = static_cast_block_pointer(pbb);
+      mask = next_mask;
+      n = next_n;
+      pd = next_pd;
+    start:
+      pbb = pb->next;
+      next_mask = pbb->mask;
+      next_n = detail::unchecked_countr_zero(next_mask);
+      next_pd = static_cast_block_pointer(pbb)->data();
+      BOOST_HUB_PREFETCH(next_pd + next_n);
+      BOOST_HUB_PREFETCH(pbb->next);
+    }
+#else
+    while(pbb != last_pbb) {
+      auto pb = static_cast_block_pointer(pbb);
+      pbb = pb->next;
+      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
+      auto mask = pb->mask;
+      do {
+        auto n = detail::unchecked_countr_zero(mask);
+        if(!f(pb->data()[n])) return {pb, n};
+        mask &= mask - 1;
+      } while(mask);
+    } 
+#endif
+    return {last_pbb};
   }
 
   block_list blist;
