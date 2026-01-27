@@ -1396,8 +1396,10 @@ public:
       ++first;
       if(first.pbb != pbb) break;
     }
-    first = visit_while_impl(first.pbb, last.pbb, f);
-    if(first.pbb != last.pbb) return first;
+    if(first.pbb != last.pbb) {
+      first = visit_while_impl(first.pbb, last.pbb, f);
+      if(first.pbb != last.pbb) return first;
+    }
     for(; first != last; ++first) if(!f(*first)) return first;
     return first;
   }
@@ -1816,6 +1818,7 @@ private:
   iterator visit_while_impl(
     block_base_pointer pbb, block_base_pointer last_pbb, F&& f)
   {
+    BOOST_ASSERT(pbb != last_pbb);
 #if 1
     auto           pb = static_cast_block_pointer(pbb);
     auto           mask = pb->mask;
@@ -1825,7 +1828,7 @@ private:
     decltype(n)    next_n;
     decltype(pd)   next_pd;
     goto start;
-    while(pb != last_pbb) {
+    do {
       for(; ; ) {
         if(!f(pd[n])) return {pb, n};
         mask &= mask - 1;
@@ -1843,9 +1846,9 @@ private:
       next_pd = static_cast_block_pointer(pbb)->data();
       BOOST_HUB_PREFETCH(next_pd + next_n);
       BOOST_HUB_PREFETCH(pbb->next);
-    }
+    } while(pb != last_pbb);
 #else
-    while(pbb != last_pbb) {
+    do {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
       BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
@@ -1855,7 +1858,7 @@ private:
         if(!f(pb->data()[n])) return {pb, n};
         mask &= mask - 1;
       } while(mask);
-    } 
+    } while(pbb != last_pbb);
 #endif
     return {last_pbb};
   }
