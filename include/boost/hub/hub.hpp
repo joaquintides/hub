@@ -1827,8 +1827,13 @@ private:
     decltype(mask) next_mask;
     decltype(n)    next_n;
     decltype(pd)   next_pd;
-    goto start;
     do {
+      pbb = pb->next;
+      next_mask = pbb->mask;
+      next_n = detail::unchecked_countr_zero(next_mask);
+      next_pd = static_cast_block_pointer(pbb)->data();
+      BOOST_HUB_PREFETCH(next_pd + next_n);
+      BOOST_HUB_PREFETCH(pbb->next);
       for(; ; ) {
         if(!f(pd[n])) return {pb, n};
         mask &= mask - 1;
@@ -1839,13 +1844,6 @@ private:
       mask = next_mask;
       n = next_n;
       pd = next_pd;
-    start:
-      pbb = pb->next;
-      next_mask = pbb->mask;
-      next_n = detail::unchecked_countr_zero(next_mask);
-      next_pd = static_cast_block_pointer(pbb)->data();
-      BOOST_HUB_PREFETCH(next_pd + next_n);
-      BOOST_HUB_PREFETCH(pbb->next);
     } while(pb != last_pbb);
 #else
     do {
