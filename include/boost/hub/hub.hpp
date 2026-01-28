@@ -1824,14 +1824,11 @@ private:
     auto           mask = pb->mask;
     auto           n = detail::unchecked_countr_zero(mask);
     auto           pd = pb->data();
-    decltype(mask) next_mask;
-    decltype(n)    next_n;
-    decltype(pd)   next_pd;
     do {
       pbb = pb->next;
-      next_mask = pbb->mask;
-      next_n = detail::unchecked_countr_zero(next_mask);
-      next_pd = static_cast_block_pointer(pbb)->data();
+      auto next_mask = pbb->mask;
+      auto next_n = detail::unchecked_countr_zero(next_mask);
+      auto next_pd = static_cast_block_pointer(pbb)->data();
       BOOST_HUB_PREFETCH(next_pd + next_n);
       BOOST_HUB_PREFETCH(pbb->next);
       for(; ; ) {
