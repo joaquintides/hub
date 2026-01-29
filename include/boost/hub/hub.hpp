@@ -394,6 +394,12 @@ struct block_list:
     pb->link_before(header());
   }
 
+  BOOST_FORCEINLINE void link_before(
+    block_pointer pbx, block_pointer pby) noexcept
+  {
+    pbx->link_before(pby);
+  }
+
   BOOST_FORCEINLINE static void unlink(block_pointer pb) noexcept
   {
     pb->unlink();
@@ -1257,6 +1263,24 @@ public:
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
   {
+#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
+    using sort_iterator = detail::sort_iterator<T, N>;
+
+    if(size_ > 1) {
+      /* compact elements and build an array of pointers to data chunks of N */
+      std::size_t n = (std::size_t)((size_ + N - 1) / N);
+      detail::nodtor_unique_ptr<T*[]> p
+        {static_cast<T**>(::operator new[](n * sizeof(T*)))};
+      std::size_t i = 0;
+      compact([&] (block_pointer pb) { 
+        p[i++] = boost::to_address(pb->data()); 
+      });
+      BOOST_ASSERT(i == n);
+
+      std::sort(
+        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
+    }
+#else
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
@@ -1275,6 +1299,7 @@ public:
       std::sort(
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
     }
+#endif
   }
 
   template<typename Compare = std::less<T>>
@@ -1737,6 +1762,43 @@ private:
       erase(it, cend());
     }
   }
+
+#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
+  template<typename Track>
+  void compact(Track track)
+  {
+    for(auto pbbx = blist.next; pbbx != blist.header(); ) {
+      auto pbx = static_cast_block_pointer(pbbx);
+      auto pbby = pbbx->next;
+      if(pbx->mask != full) {
+        do{
+          while(pbby->mask == full) {
+            track(static_cast_block_pointer(pbby));
+            pbby = pbby->next;
+          }
+          blist.unlink(pbx);
+          blist.link_before(pbx, static_cast_block_pointer(pbby));
+          if(pbby == blist.header()) {
+            compact(pbx);
+            track(pbx);
+            return;
+          }
+          else{
+            auto pby = static_cast_block_pointer(pbby);
+            compact(pbx,pby);
+            if(pby->mask == 0) {
+              pbby = pby->next;
+              blist.unlink(pby);
+            }
+          }
+        }while(pbx->mask != full);
+        blist.unlink_available(pbx);
+      }
+      track(pbx);
+      pbbx = pbby;
+    }
+  }
+#endif
 
   void compact()
   {
