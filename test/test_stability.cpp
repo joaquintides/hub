@@ -31,7 +31,10 @@ struct tidy_int
 };
 
 template<typename Hub>
-using erase_callback = std::function<void(typename Hub::iterator)>;
+using hub_iterator_t = typename Hub::iterator;
+
+template<typename Hub>
+using erase_callback = std::function<void(hub_iterator_t<Hub>)>;
 
 template<typename Hub>
 struct track_info
