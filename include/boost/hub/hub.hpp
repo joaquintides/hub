@@ -1149,103 +1149,6 @@ public:
     compact_sort(comp);
   }
 
-  template<typename Compare = std::less<T>>
-  void compact_sort(Compare comp = Compare())
-  {
-    /* compact elements and build an array of pointers to data chunks of N */
-    using sort_iterator = detail::sort_iterator<T, N>;
-
-    if(size_ > 1) {
-      std::size_t n = (std::size_t)((size_ + N - 1) / N);
-      detail::nodtor_unique_ptr<T*[]> p
-        {static_cast<T**>(::operator new[](n * sizeof(T*)))};
-      std::size_t i = 0;
-      compact([&] (block_pointer pb) { 
-        p[i++] = boost::to_address(pb->data()); 
-      });
-      BOOST_ASSERT(i == n);
-
-      std::sort(
-        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
-    }
-  }
-
-  struct sort_proxy
-  {
-    T*        p;
-    size_type n;
-  };
-
-  template<typename Compare = std::less<T>>
-  bool proxy_sort(Compare comp = Compare())
-  {
-    /* sort an array of (pointer, index) pairs and relocate according to it */
-    if(size_ > 1) {
-      using unique_ptr = detail::nodtor_unique_ptr<sort_proxy[]>;
-
-      unique_ptr p;
-      BOOST_TRY {
-        p = unique_ptr{
-          static_cast<sort_proxy*>(
-            ::operator new[](size_ * sizeof(sort_proxy)))};
-      }
-      BOOST_CATCH(const std::bad_alloc&) {
-        return false;
-      }
-      BOOST_CATCH_END
-      size_type i = 0;
-      visit_all([&] (value_type& x) {
-        p[i] = {std::addressof(x), i};
-        ++i;
-      });
-
-      std::sort(
-        p.get(), p.get() + size_, 
-        [&] (const sort_proxy& x, const sort_proxy& y) {
-          return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
-        });
-
-      i = 0;
-      for(; i < size_; ++i) {
-        if(p[i].n != i) {
-          T    x = std::move(*(p[i].p));
-          auto j = i;
-          do {
-            auto k = p[j].n;
-            *(p[j].p) = std::move(*p[k].p);
-            p[j].n = j;
-            j = k;
-          } while(p[j].n != i);
-          *(p[j].p) = std::move(x);
-          p[j].n = j;
-        }
-      }
-    }
-    return true;
-  }
-
-  template<typename Compare = std::less<T>>
-  bool transfer_sort(Compare comp = Compare())
-  {
-    /* transfer to a vector, sort and transfer back */
-    using vector = std::vector<
-      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
-    vector v(
-      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
-    BOOST_TRY {
-      v.reserve(size_);
-    }
-    BOOST_CATCH(const std::bad_alloc&) {
-      return false;
-    }
-    BOOST_CATCH_END
-    visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
-    std::sort(v.begin(), v.end(), comp);
-    size_type i = 0;
-    visit_all([&] (value_type& x) { x = std::move(v[i++]); });
-    return true;
-  }
-
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
   {   
     std::less<const T*> less;
@@ -1600,6 +1503,103 @@ private:
     }
   }
 
+  template<typename Compare = std::less<T>>
+  bool transfer_sort(Compare comp = Compare())
+  {
+    /* transfer to a vector, sort and transfer back */
+    using vector = std::vector<
+      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
+    vector v(
+      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
+    BOOST_TRY {
+      v.reserve(size_);
+    }
+    BOOST_CATCH(const std::bad_alloc&) {
+      return false;
+    }
+    BOOST_CATCH_END
+    visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
+    std::sort(v.begin(), v.end(), comp);
+    size_type i = 0;
+    visit_all([&] (value_type& x) { x = std::move(v[i++]); });
+    return true;
+  }
+
+  struct sort_proxy
+  {
+    T*        p;
+    size_type n;
+  };
+
+  template<typename Compare = std::less<T>>
+  bool proxy_sort(Compare comp = Compare())
+  {
+    /* sort an array of (pointer, index) pairs and relocate according to it */
+    if(size_ > 1) {
+      using unique_ptr = detail::nodtor_unique_ptr<sort_proxy[]>;
+
+      unique_ptr p;
+      BOOST_TRY {
+        p = unique_ptr{
+          static_cast<sort_proxy*>(
+            ::operator new[](size_ * sizeof(sort_proxy)))};
+      }
+      BOOST_CATCH(const std::bad_alloc&) {
+        return false;
+      }
+      BOOST_CATCH_END
+      size_type i = 0;
+      visit_all([&] (value_type& x) {
+        p[i] = {std::addressof(x), i};
+        ++i;
+      });
+
+      std::sort(
+        p.get(), p.get() + size_, 
+        [&] (const sort_proxy& x, const sort_proxy& y) {
+          return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p));
+        });
+
+      i = 0;
+      for(; i < size_; ++i) {
+        if(p[i].n != i) {
+          T    x = std::move(*(p[i].p));
+          auto j = i;
+          do {
+            auto k = p[j].n;
+            *(p[j].p) = std::move(*p[k].p);
+            p[j].n = j;
+            j = k;
+          } while(p[j].n != i);
+          *(p[j].p) = std::move(x);
+          p[j].n = j;
+        }
+      }
+    }
+    return true;
+  }
+
+  template<typename Compare = std::less<T>>
+  void compact_sort(Compare comp = Compare())
+  {
+    /* compact elements and build an array of pointers to data chunks of N */
+    using sort_iterator = detail::sort_iterator<T, N>;
+
+    if(size_ > 1) {
+      std::size_t n = (std::size_t)((size_ + N - 1) / N);
+      detail::nodtor_unique_ptr<T*[]> p
+        {static_cast<T**>(::operator new[](n * sizeof(T*)))};
+      std::size_t i = 0;
+      compact([&] (block_pointer pb) { 
+        p[i++] = boost::to_address(pb->data()); 
+      });
+      BOOST_ASSERT(i == n);
+
+      std::sort(
+        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
+    }
+  }
+
   template<typename Track>
   void compact(Track track)
   {
@@ -1676,7 +1676,6 @@ private:
     block_base_pointer pbb, block_base_pointer last_pbb, F&& f)
   {
     BOOST_ASSERT(pbb != last_pbb);
-#if 1
     auto           pb = static_cast_block_pointer(pbb);
     auto           mask = pb->mask;
     auto           n = detail::unchecked_countr_zero(mask);
@@ -1699,19 +1698,6 @@ private:
       n = next_n;
       pd = next_pd;
     } while(pb != last_pbb);
-#else
-    do {
-      auto pb = static_cast_block_pointer(pbb);
-      pbb = pb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
-      auto mask = pb->mask;
-      do {
-        auto n = detail::unchecked_countr_zero(mask);
-        if(!f(pb->data()[n])) return {pb, n};
-        mask &= mask - 1;
-      } while(mask);
-    } while(pbb != last_pbb);
-#endif
     return {last_pbb};
   }
 
