@@ -1271,6 +1271,8 @@ public:
      * exceeds some threshold seemingly related to the size of the L2 cache;
      * we conventionally set the threshold to 2MB for lack of a more precise
      * estimation mechanism.
+     * TODO: In 32-bit mode, the threshold policy is not so clear-cut and the
+     * cost of moving elements around seems to play a role.
      */
     BOOST_IF_CONSTEXPR(sizeof(T) <= sizeof(sort_proxy)) {
       if(transfer_sort(comp)) return;
