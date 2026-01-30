@@ -1628,13 +1628,6 @@ private:
 #endif
   }
 
-  void delete_block(block_pointer pb)
-  {
-    allocator_rebind_t<Allocator, value_type> val(al());
-    allocator_deallocate(val, pb->data_, N);
-    allocator_deallocate(al(), pb, 1);
-  }
-
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
     if(BOOST_LIKELY(blist.next_available != blist.header())){
