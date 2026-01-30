@@ -5,8 +5,8 @@
  */
 
 #include <algorithm>
+#include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
-#include <boost/hub.hpp>
 #include <functional>
 #include <iterator>
 #include <memory>
@@ -224,8 +224,8 @@ void test()
 
 int main()
 {
-  test<boost::hub<int>>();
-  test<boost::hub<tidy_int>>();
+  test<boost::container::hub<int>>();
+  test<boost::container::hub<tidy_int>>();
 
   return boost::report_errors();
 }

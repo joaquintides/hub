@@ -4,8 +4,8 @@
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
+#include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
-#include <boost/hub.hpp>
 #include <scoped_allocator>
 #include <string>
 #include "utility.hpp"
@@ -14,7 +14,7 @@ int main()
 {
   using string = std::basic_string<
     char, std::char_traits<char>, stateful_allocator<char>>;
-  using hub = boost::hub<
+  using hub = boost::container::hub<
     string, std::scoped_allocator_adaptor<stateful_allocator<string>>>;
   using allocator_type = hub::allocator_type;
 

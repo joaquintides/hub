@@ -6,8 +6,8 @@
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
-#ifndef BOOST_HUB_HUB_HPP
-#define BOOST_HUB_HUB_HPP
+#ifndef BOOST_CONTAINER_HUB_HPP
+#define BOOST_CONTAINER_HUB_HPP
 
 #include <algorithm>
 #include <boost/assert.hpp>
@@ -18,7 +18,6 @@
 #include <boost/core/empty_value.hpp>
 #include <boost/core/no_exceptions_support.hpp>
 #include <boost/core/pointer_traits.hpp>
-#include <boost/hub/hub_fwd.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -31,75 +30,80 @@
 #include <utility>
 #include <vector>
 
+#ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
+#include <memory_resource>
+#endif
+
 #if defined(BOOST_NO_CXX20_HDR_CONCEPTS) || defined(BOOST_NO_CXX20_HDR_RANGES)
-#define BOOST_HUB_NO_RANGES
+#define BOOST_CONTAINER_HUB_NO_RANGES
 #elif BOOST_WORKAROUND(BOOST_CLANG_VERSION, < 170100) && \
       defined(BOOST_LIBSTDCXX_VERSION)
 /* https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109647
  * https://github.com/llvm/llvm-project/issues/49620
  */
-#define BOOST_HUB_NO_RANGES
+#define BOOST_CONTAINER_HUB_NO_RANGES
 #endif
 
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
 #include <concepts>
 #include <ranges>
 #endif
 
-#if !defined(BOOST_HUB_DISABLE_SSE2)
-#if defined(BOOST_HUB_ENABLE_SSE2)|| \
+#if !defined(BOOST_CONTAINER_HUB_DISABLE_SSE2)
+#if defined(BOOST_CONTAINER_HUB_ENABLE_SSE2)|| \
     defined(__SSE2__) || \
     defined(_M_X64) || (defined(_M_IX86_FP)&&_M_IX86_FP>=2)
-#define BOOST_HUB_SSE2
+#define BOOST_CONTAINER_HUB_SSE2
 #endif
 #endif
 
-#if defined(BOOST_HUB_SSE2)
+#if defined(BOOST_CONTAINER_HUB_SSE2)
 #include <emmintrin.h>
 #endif
 
 #ifdef __has_builtin
-#define BOOST_HUB_HAS_BUILTIN(x) __has_builtin(x)
+#define BOOST_CONTAINER_HUB_HAS_BUILTIN(x) __has_builtin(x)
 #else
-#define BOOST_HUB_HAS_BUILTIN(x) 0
+#define BOOST_CONTAINER_HUB_HAS_BUILTIN(x) 0
 #endif
 
 #if !defined(NDEBUG)
-#define BOOST_HUB_ASSUME(cond) BOOST_ASSERT(cond)
-#elif BOOST_HUB_HAS_BUILTIN(__builtin_assume)
-#define BOOST_HUB_ASSUME(cond) __builtin_assume(cond)
-#elif defined(__GNUC__) || BOOST_HUB_HAS_BUILTIN(__builtin_unreachable)
-#define BOOST_HUB_ASSUME(cond)           \
+#define BOOST_CONTAINER_HUB_ASSUME(cond) BOOST_ASSERT(cond)
+#elif BOOST_CONTAINER_HUB_HAS_BUILTIN(__builtin_assume)
+#define BOOST_CONTAINER_HUB_ASSUME(cond) __builtin_assume(cond)
+#elif defined(__GNUC__) || \
+      BOOST_CONTAINER_HUB_HAS_BUILTIN(__builtin_unreachable)
+#define BOOST_CONTAINER_HUB_ASSUME(cond)           \
   do{                                    \
     if(!(cond)) __builtin_unreachable(); \
   } while(0)
 #elif defined(_MSC_VER)
-#define BOOST_HUB_ASSUME(cond) __assume(cond)
+#define BOOST_CONTAINER_HUB_ASSUME(cond) __assume(cond)
 #else
-#define BOOST_HUB_ASSUME(cond)          \
+#define BOOST_CONTAINER_HUB_ASSUME(cond)          \
   do{                                   \
     static_cast<void>(false && (cond)); \
   } while(0)
 #endif
 
-/* We use BOOST_HUB_PREFETCH[_BLOCK] macros rather than proper
+/* We use BOOST_CONTAINER_HUB_PREFETCH[_BLOCK] macros rather than proper
  * functions because of https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109985
  */
 
 #if defined(BOOST_GCC) || defined(BOOST_CLANG)
-#define BOOST_HUB_PREFETCH(p) \
+#define BOOST_CONTAINER_HUB_PREFETCH(p) \
 __builtin_prefetch((const char*)boost::to_address(p))
-#elif defined(BOOST_HUB_SSE2)
-#define BOOST_HUB_PREFETCH(p) \
+#elif defined(BOOST_CONTAINER_HUB_SSE2)
+#define BOOST_CONTAINER_HUB_PREFETCH(p) \
 _mm_prefetch((const char*)boost::to_address(p), _MM_HINT_T0)
 #else
-#define BOOST_HUB_PREFETCH(p) ((void)(p))
+#define BOOST_CONTAINER_HUB_PREFETCH(p) ((void)(p))
 #endif
 
-#define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
-do{                                          \
-  auto p0 = &static_cast<Block&>(*(pbb));    \
-  BOOST_HUB_PREFETCH(p0->data());            \
+#define BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb, Block) \
+do{                                                    \
+  auto p0 = &static_cast<Block&>(*(pbb));              \
+  BOOST_CONTAINER_HUB_PREFETCH(p0->data());            \
 } while(0)
 
 #if defined(BOOST_MSVC)
@@ -109,9 +113,24 @@ do{                                          \
 
 namespace boost {
 
-namespace hubs {
+namespace container {
 
-namespace detail {
+template<typename T, typename Allocator = std::allocator<T>>
+class hub;
+
+template<typename T, typename Allocator, typename Predicate>
+typename hub<T, Allocator>::size_type erase_if(hub<T, Allocator>&, Predicate);
+
+#ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
+namespace pmr {
+
+template<typename T>
+using hub = boost::container::hub<T, std::pmr::polymorphic_allocator<T>>;
+
+}
+#endif
+
+namespace hub_detail {
 
 inline int unchecked_countr_zero(std::uint64_t x)
 {
@@ -122,7 +141,7 @@ inline int unchecked_countr_zero(std::uint64_t x)
 #elif defined(BOOST_GCC) || defined(BOOST_CLANG)
   return (int)__builtin_ctzll(x);
 #else
-  BOOST_HUB_ASSUME(x != 0);
+  BOOST_CONTAINER_HUB_ASSUME(x != 0);
   return (int)core::countr_zero(x);
 #endif
 }
@@ -141,7 +160,7 @@ inline int unchecked_countl_zero(std::uint64_t x)
 #elif defined(BOOST_GCC) || defined(BOOST_CLANG)
   return (int)__builtin_clzll(x);
 #else  
-  BOOST_HUB_ASSUME(x != 0);
+  BOOST_CONTAINER_HUB_ASSUME(x != 0);
   return (int)core::countl_zero(x);
 #endif
 }
@@ -240,7 +259,7 @@ void swap_payload(block<ValuePointer>& x, block<ValuePointer>& y) noexcept
 template<typename ValuePointer>
 struct block_list: block<ValuePointer>
 {
-  using block = detail::block<ValuePointer>;
+  using block = hub_detail::block<ValuePointer>;
   using block_base = typename block::super;
   using block_base_pointer = typename block_base::pointer;
   using const_block_base_pointer = typename block_base::const_pointer;
@@ -422,10 +441,10 @@ public:
     auto mask = pbb->mask & (full << 1 << n);
     if(BOOST_UNLIKELY(mask == 0)) {
       pbb = pbb->next;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->next, block);
+      BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb->next, block);
       mask = pbb->mask;
     }
-    n = detail::unchecked_countr_zero(mask);
+    n = hub_detail::unchecked_countr_zero(mask);
     return *this;
   }
 
@@ -441,10 +460,10 @@ public:
     auto mask = pbb->mask & (full >> 1 >> (N - 1 - n));
     if(BOOST_UNLIKELY(mask == 0)) {
       pbb = pbb->prev;
-      BOOST_HUB_PREFETCH_BLOCK(pbb->prev, block);
+      BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb->prev, block);
       mask = pbb->mask;
     }
-    n = N - 1 - detail::unchecked_countl_zero(mask);
+    n = N - 1 - hub_detail::unchecked_countl_zero(mask);
     return *this;
   }
 
@@ -467,14 +486,14 @@ public:
 
 private:
   template<typename> friend class iterator;
-  template<typename, typename> friend class hubs::hub;
+  template<typename, typename> friend class container::hub;
 
   template<typename T>
-  using pointer_rebind_t = detail::pointer_rebind_t<ValuePointer, T>;
-  using block_base = detail::block_base<pointer_rebind_t<void>>;
+  using pointer_rebind_t = hub_detail::pointer_rebind_t<ValuePointer, T>;
+  using block_base = hub_detail::block_base<pointer_rebind_t<void>>;
   using block_base_pointer = pointer_rebind_t<block_base>;
   using const_block_base_pointer = pointer_rebind_t<const block_base>;
-  using block = detail::block<pointer_rebind_t<value_type>>;
+  using block = hub_detail::block<pointer_rebind_t<value_type>>;
   using mask_type = typename block_base::mask_type;
 
   static constexpr int N = block_base::N;
@@ -485,7 +504,7 @@ private:
 
   iterator(const_block_base_pointer pbb_) noexcept:
     pbb{const_cast_block_base_pointer(pbb_)}, 
-    n{detail::unchecked_countr_zero(pbb->mask)} 
+    n{hub_detail::unchecked_countr_zero(pbb->mask)} 
   {}
 
   static block_base_pointer
@@ -649,7 +668,7 @@ struct type_identity { using type = T; };
 template<typename T>
 using type_identity_t = typename type_identity<T>::type;
 
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
 template<class R, class T>
 concept container_compatible_range =
   std::ranges::input_range<R> &&
@@ -663,34 +682,37 @@ concept container_compatible_range =
 struct from_range_t{ explicit from_range_t() = default; };
 struct from_range_t_hook{};
 
-} /* namespace detail */
-} /* namespace hubs */
+} /* namespace hub_detail */
+} /* namespace container */
 } /* namespace boost */
 
 namespace std {
 
-template<> struct hash< ::boost::hubs::detail::from_range_t_hook>
+template<> struct hash< ::boost::container::hub_detail::from_range_t_hook>
 {
   using from_range_t_type = decltype([] {
-    using namespace ::boost::hubs::detail;
+    using namespace ::boost::container::hub_detail;
     return from_range_t{};
   }());
 
   /* make standard happy */
   std::size_t operator()(
-    const ::boost::hubs::detail::from_range_t_hook&) const;
+    const ::boost::container::hub_detail::from_range_t_hook&) const;
 };
 
 }
 
 namespace boost {
-namespace hubs {
+namespace container {
 
+/* TODO: this may collide with other same-named entities in different
+ * parts of Boost.Container.
+ */
 using from_range_t = 
-  typename std::hash<detail::from_range_t_hook>::from_range_t_type;
+  typename std::hash<hub_detail::from_range_t_hook>::from_range_t_type;
 inline constexpr from_range_t from_range {};
 
-namespace detail {
+namespace hub_detail {
 #endif
 
 template<typename InputIterator>
@@ -733,22 +755,22 @@ struct block_typedefs
 {
   using pointer = allocator_pointer_t<Allocator>;
   template<typename Q>
-  using pointer_rebind_t = detail::pointer_rebind_t<pointer, Q>;
+  using pointer_rebind_t = hub_detail::pointer_rebind_t<pointer, Q>;
 
-  using block_base = detail::block_base<pointer_rebind_t<void>>;
+  using block_base = hub_detail::block_base<pointer_rebind_t<void>>;
   using block_base_pointer = pointer_rebind_t<block_base>;
   using const_block_base_pointer = pointer_rebind_t<const block_base>;
-  using block = detail::block<pointer>;
+  using block = hub_detail::block<pointer>;
   using block_pointer = pointer_rebind_t<block>;
   using block_allocator = allocator_rebind_t<Allocator,block>;
-  using block_list = detail::block_list<pointer>;
+  using block_list = hub_detail::block_list<pointer>;
 };
 
-} /* namespace hubs::detail */
+} /* namespace container::hub_detail */
 
 template<typename T, typename Allocator>
 class hub: empty_value<
-  typename detail::block_typedefs<Allocator>::block_allocator, 0>
+  typename hub_detail::block_typedefs<Allocator>::block_allocator, 0>
 {
   static_assert(
     !std::is_const<T>::value && !std::is_volatile<T>::value && 
@@ -768,8 +790,8 @@ public:
   using const_reference = const T&;
   using size_type = allocator_size_type_t<Allocator>;
   using difference_type = allocator_difference_type_t<Allocator>;
-  using iterator = detail::iterator<pointer>;
-  using const_iterator = detail::iterator<const_pointer>;
+  using iterator = hub_detail::iterator<pointer>;
+  using const_iterator = hub_detail::iterator<const_pointer>;
   using reverse_iterator = std::reverse_iterator<iterator>;
   using const_reverse_iterator = std::reverse_iterator<const_iterator>; 
 
@@ -792,7 +814,7 @@ public:
 
   template<
     typename InputIterator, 
-    typename = detail::enable_if_is_input_iterator_t<InputIterator>
+    typename = hub_detail::enable_if_is_input_iterator_t<InputIterator>
   >
   hub(
     InputIterator first, InputIterator last,
@@ -801,8 +823,8 @@ public:
     insert(first, last);
   }
 
-#if !defined(BOOST_HUB_NO_RANGES)
-  template<detail::container_compatible_range<T> R>
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+  template<hub_detail::container_compatible_range<T> R>
   hub(from_range_t, R&& rg, const Allocator& al_ = Allocator()): hub{al_}
   {
     insert_range(std::forward<R>(rg));
@@ -812,13 +834,13 @@ public:
   hub(const hub& x):
     hub{x, allocator_select_on_container_copy_construction(x.al())} {}
 
-  hub(const hub& x, const detail::type_identity_t<Allocator>& al_):
+  hub(const hub& x, const hub_detail::type_identity_t<Allocator>& al_):
     hub(x.begin(), x.end(), al_) {}
 
   hub(hub&& x) noexcept:
     hub{std::move(x), Allocator(std::move(x.al())), std::true_type{}} {}
 
-  hub(hub&& x, const detail::type_identity_t<Allocator>& al_):
+  hub(hub&& x, const hub_detail::type_identity_t<Allocator>& al_):
     hub{std::move(x), al_, allocator_is_always_equal_t<Allocator>{}} {}
 
   hub(std::initializer_list<T> il, const Allocator& al_ = Allocator()):
@@ -834,11 +856,11 @@ public:
     if(this != &x) {
       if(al() != x.al() && pocca::value) {
         reset();
-        detail::copy_assign_if(pocca{}, al(), x.al());
+        hub_detail::copy_assign_if(pocca{}, al(), x.al());
         insert(x.begin(), x.end());
       }
       else{
-        detail::copy_assign_if(pocca{}, al(), x.al());
+        hub_detail::copy_assign_if(pocca{}, al(), x.al());
         assign(x.begin(), x.end());
       }
     }
@@ -870,7 +892,7 @@ public:
 
   template<
     typename InputIterator,
-    typename = detail::enable_if_is_input_iterator_t<InputIterator>
+    typename = hub_detail::enable_if_is_input_iterator_t<InputIterator>
   >
   void assign(InputIterator first, InputIterator last)
   {
@@ -880,8 +902,8 @@ public:
       [] (T* p, InputIterator it) { *p = *it; });
   }
 
-#if !defined(BOOST_HUB_NO_RANGES)
-  template<detail::container_compatible_range<T> R>
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+  template<hub_detail::container_compatible_range<T> R>
   void assign_range(R&& rg)
   {
     range_assign_impl(
@@ -999,8 +1021,8 @@ public:
 
   void insert(std::initializer_list<T> il) { insert(il.begin(), il.end()); }
 
-#if !defined(BOOST_HUB_NO_RANGES)
-  template<detail::container_compatible_range<T> R>
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+  template<hub_detail::container_compatible_range<T> R>
   void insert_range(R&& rg)
   {
     range_insert_impl(
@@ -1011,7 +1033,7 @@ public:
 
   template<
     typename InputIterator,
-    typename = detail::enable_if_is_input_iterator_t<InputIterator>
+    typename = hub_detail::enable_if_is_input_iterator_t<InputIterator>
   >
   void insert(InputIterator first, InputIterator last)
   {
@@ -1052,7 +1074,7 @@ public:
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
-        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+        BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb, block);
         size_ -= destroy_all_in_nonempty_block(pb);
         blist.unlink(pb);
         if(BOOST_UNLIKELY(pb->mask == full)) blist.link_available_at_front(pb);
@@ -1071,8 +1093,8 @@ public:
   {
     using pocs = allocator_propagate_on_container_swap_t<Allocator>;
 
-    detail::if_constexpr(pocs{}, [&, this]{
-      detail::swap_if(pocs{}, al(), x.al());
+    hub_detail::if_constexpr(pocs{}, [&, this]{
+      hub_detail::swap_if(pocs{}, al(), x.al());
     },
     [&, this]{ /* else */
       BOOST_ASSERT(al() == x.al());
@@ -1239,7 +1261,7 @@ private:
   template<typename U, typename A, typename P>
   friend typename hub<U, A>::size_type erase_if(hub<U, A>&, P);
 
-  using block_typedefs = detail::block_typedefs<Allocator>;
+  using block_typedefs = hub_detail::block_typedefs<Allocator>;
   using block_base = typename block_typedefs::block_base;
   using block_base_pointer = typename block_typedefs::block_base_pointer;
   using const_block_base_pointer = 
@@ -1298,7 +1320,7 @@ private:
       allocator_propagate_on_container_move_assignment_t<Allocator>;
 
     reset();
-    detail::move_assign_if(pocma{}, al(), x.al());
+    hub_detail::move_assign_if(pocma{}, al(), x.al());
     blist = std::move(x.blist);
     num_blocks = x.num_blocks;
     size_ = x.size_;
@@ -1357,7 +1379,7 @@ private:
   {
     if(BOOST_LIKELY(blist.next_available != blist.header())){
       auto pb = static_cast_block_pointer(blist.next_available);
-      n = detail::unchecked_countr_one(pb->mask);
+      n = hub_detail::unchecked_countr_one(pb->mask);
       return pb;
     }
     else {
@@ -1385,7 +1407,7 @@ private:
     size_type s = 0;
     auto      mask = pb->mask;
     do {
-      auto n = detail::unchecked_countr_zero(mask);
+      auto n = hub_detail::unchecked_countr_zero(mask);
       allocator_destroy(al(), pb->data() + n);
       ++s;
       mask &= mask - 1;
@@ -1408,7 +1430,7 @@ private:
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next_available;
       BOOST_IF_CONSTEXPR(!std::is_trivially_destructible<T>::value) {
-        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+        BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb, block);
       }
       if(pb->mask != 0) {
         destroy_all_in_nonempty_block(pb);
@@ -1422,7 +1444,7 @@ private:
       auto pb = static_cast_block_pointer(pbb);
       pbb = pb->next;
       BOOST_IF_CONSTEXPR(!std::is_trivially_destructible<T>::value) {
-        BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+        BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb, block);
       }
       destroy_all_in_full_block(pb);
       delete_block(pb);
@@ -1459,7 +1481,7 @@ private:
           break;
         }
         else if(first == last) return;
-        n = detail::unchecked_countr_one(pb->mask);
+        n = hub_detail::unchecked_countr_one(pb->mask);
       }
     }
   }
@@ -1536,7 +1558,7 @@ private:
   {
     /* sort an array of (pointer, index) pairs and relocate according to it */
     if(size_ > 1) {
-      using unique_ptr = detail::nodtor_unique_ptr<sort_proxy[]>;
+      using unique_ptr = hub_detail::nodtor_unique_ptr<sort_proxy[]>;
 
       unique_ptr p;
       BOOST_TRY {
@@ -1583,11 +1605,11 @@ private:
   void compact_sort(Compare comp = Compare())
   {
     /* compact elements and build an array of pointers to data chunks of N */
-    using sort_iterator = detail::sort_iterator<T, N>;
+    using sort_iterator = hub_detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
-      detail::nodtor_unique_ptr<T*[]> p
+      hub_detail::nodtor_unique_ptr<T*[]> p
         {static_cast<T**>(::operator new[](n * sizeof(T*)))};
       std::size_t i = 0;
       compact([&] (block_pointer pb) { 
@@ -1647,8 +1669,8 @@ private:
     }
     auto c = (std::min)(N - cx, cy);
     while(c--) {
-      auto n = detail::unchecked_countr_one(pbx->mask);
-      auto m = N - 1 - detail::unchecked_countl_zero(pby->mask);
+      auto n = hub_detail::unchecked_countr_one(pbx->mask);
+      auto m = N - 1 - hub_detail::unchecked_countl_zero(pby->mask);
       allocator_construct(
         al(), boost::to_address(pbx->data() + n), std::move(pby->data()[m]));
       allocator_destroy(al(), boost::to_address(pby->data() + m));
@@ -1660,8 +1682,8 @@ private:
   void compact(block_pointer pb)
   {
     for(; ;) {
-      auto n = detail::unchecked_countr_one(pb->mask);
-      auto m = N - 1 - detail::unchecked_countl_zero(pb->mask);
+      auto n = hub_detail::unchecked_countr_one(pb->mask);
+      auto m = N - 1 - hub_detail::unchecked_countl_zero(pb->mask);
       if(n > m) return;
       allocator_construct(
         al(), boost::to_address(pb->data() + n), std::move(pb->data()[m]));
@@ -1678,20 +1700,20 @@ private:
     BOOST_ASSERT(pbb != last_pbb);
     auto           pb = static_cast_block_pointer(pbb);
     auto           mask = pb->mask;
-    auto           n = detail::unchecked_countr_zero(mask);
+    auto           n = hub_detail::unchecked_countr_zero(mask);
     auto           pd = pb->data();
     do {
       pbb = pb->next;
       auto next_mask = pbb->mask;
-      auto next_n = detail::unchecked_countr_zero(next_mask);
+      auto next_n = hub_detail::unchecked_countr_zero(next_mask);
       auto next_pd = static_cast_block_pointer(pbb)->data();
-      BOOST_HUB_PREFETCH(next_pd + next_n);
-      BOOST_HUB_PREFETCH(pbb->next);
+      BOOST_CONTAINER_HUB_PREFETCH(next_pd + next_n);
+      BOOST_CONTAINER_HUB_PREFETCH(pbb->next);
       for(; ; ) {
         if(!f(pd[n])) return {pb, n};
         mask &= mask - 1;
         if(!mask) break;
-        n = detail::unchecked_countr_zero(mask);
+        n = hub_detail::unchecked_countr_zero(mask);
       }
       pb = static_cast_block_pointer(pbb);
       mask = next_mask;
@@ -1716,7 +1738,7 @@ hub(InputIterator, InputIterator, Allocator = Allocator())
   -> hub<
     typename std::iterator_traits<InputIterator>::value_type, Allocator>;
 
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
 template<
   std::ranges::input_range R,
   typename Allocator = std::allocator<std::ranges::range_value_t<R>>
@@ -1745,10 +1767,10 @@ erase_if(hub<T, Allocator>& x, Predicate pred)
   for(auto pbb = x.blist.next; pbb != x.blist.header(); ) {
     auto pb = x.static_cast_block_pointer(pbb);
     pbb = pb->next;
-    BOOST_HUB_PREFETCH_BLOCK(pbb, block);
+    BOOST_CONTAINER_HUB_PREFETCH_BLOCK(pbb, block);
     auto mask = pb->mask;
     do {
-      auto n = detail::unchecked_countr_zero(mask);
+      auto n = hub_detail::unchecked_countr_zero(mask);
       if(pred(pb->data()[n])) x.erase_impl(pb, n);
       mask &= mask - 1;
     } while(mask);
@@ -1756,14 +1778,14 @@ erase_if(hub<T, Allocator>& x, Predicate pred)
   return (size_type)(s - x.size_);
 }
 
-template<typename T, typename Allocator, typename U>
+template<typename T, typename Allocator, typename U = T>
 typename hub<T, Allocator>::size_type
 erase(hub<T, Allocator>& x, const U& value)
 {
   return erase_if(x, [&](const T& v) -> bool { return v == value; });
 }
 
-} /* namespace hubs */
+} /* namespace container */
 
 } /* namespace boost */
 

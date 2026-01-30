@@ -4,9 +4,9 @@
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
+#include <boost/container/hub.hpp>
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
-#include <boost/hub.hpp>
 #include <type_traits>
 #include "utility.hpp"
 
@@ -101,7 +101,7 @@ void test()
 
 int main()
 {
-  test<boost::hub<int>>();
+  test<boost::container::hub<int>>();
 
   return boost::report_errors();
 }

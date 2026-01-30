@@ -7,10 +7,10 @@
 #include <algorithm>
 #include <boost/config.hpp>
 #include <boost/config/workaround.hpp>
+#include <boost/container/hub.hpp>
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/core/pointer_traits.hpp>
-#include <boost/hub.hpp>
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/uuid/random_generator.hpp>
@@ -225,8 +225,8 @@ void test(const typename Hub::allocator_type& al = {})
   }
 #if !defined(BOOST_HUB_NO_RANGES)
   {
-    Hub x = noalloc_construct<Hub>(al, boost::hubs::from_range, rng), 
-        y{boost::hubs::from_range, rng, al};
+    Hub x = noalloc_construct<Hub>(al, boost::container::from_range, rng),
+        y{boost::container::from_range, rng, al};
     test_equal(x, rng);
     test_equal(y, rng);
   }
@@ -660,8 +660,8 @@ void test_ctad()
 #if !defined(BOOST_HUB_NO_RANGES)
   {
     std::vector<int> rng({0, 1, 2, 3});
-    Hub x{boost::hubs::from_range, rng}; 
-    Hub y{boost::hubs::from_range, rng, std::allocator<int>{}};
+    Hub x{boost::container::from_range, rng}; 
+    Hub y{boost::container::from_range, rng, std::allocator<int>{}};
     test_equal(x, rng);
     test_equal(y, rng);
   }
@@ -671,13 +671,13 @@ void test_ctad()
 
 int main()
 {
-  test<boost::hub<int>>();
-  test<boost::hub<std::size_t>>();
+  test<boost::container::hub<int>>();
+  test<boost::container::hub<std::size_t>>();
 
   namespace bip = boost::interprocess;
   using segment_manager = bip::managed_shared_memory::segment_manager;
   using shared_int_allocator = bip::allocator<int, segment_manager>;
-  using shared_int_hub = boost::hub<int, shared_int_allocator>;
+  using shared_int_hub = boost::container::hub<int, shared_int_allocator>;
 
   static auto segment_name_str = 
     std::string("boost_hub_test_api_shmem_segment") +
@@ -693,10 +693,10 @@ int main()
   test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
 
 #if !defined(BOOST_NO_CXX17_HDR_MEMORY_RESOURCE)
-  test<boost::hubs::pmr::hub<int>>();
+  test<boost::container::pmr::hub<int>>();
 #endif
 
-  test_ctad<boost::hub>();
+  test_ctad<boost::container::hub>();
 
   return boost::report_errors();
 }
