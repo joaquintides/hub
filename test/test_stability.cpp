@@ -30,11 +30,16 @@ struct tidy_int
   int n;
 };
 
-template<typename Hub>
-using hub_iterator_t = typename Hub::iterator;
+template<class T>
+struct type_identity { using type = T; };
 
+template<class T>
+using type_identity_t = typename type_identity<T>::type;
+
+/* type_identity_t used to silence injected-class-name warn by icpx */
 template<typename Hub>
-using erase_callback = std::function<void(hub_iterator_t<Hub>)>;
+using erase_callback =
+  std::function<void(type_identity_t<typename Hub::iterator>)>;
 
 template<typename Hub>
 struct track_info
