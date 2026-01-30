@@ -15,10 +15,9 @@ project
       <library>/boost/config//boost_config
       <library>/boost/core//boost_core
       <library>/boost/interprocess//boost_interprocess
-      <library>/boost/smart_ptr//boost_smart_ptr     
       <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
-	  <target-os>cygwin:<define>_XOPEN_SOURCE=600
+      <target-os>cygwin:<define>_XOPEN_SOURCE=600
     ;
 
 run test_api.cpp ;

@@ -537,6 +537,106 @@ void test(const typename Hub::allocator_type& al = {})
     }
   }
 
+  /* visitation */
+
+  {
+    Hub        x{rng.begin(), rng.end(), al};
+    const Hub& cx=x;
+    puncture(x);
+
+    unsigned int res = 0;
+    auto         f = [&] (value_type& x) { res += (unsigned int)x;};
+    auto         cf = [&] (const value_type& x) { res += (unsigned int)x;};
+
+    for(std::size_t i = 0; i < x.size() / 2; ++i) {
+      auto first = std::next(x.begin(), (int)i),
+           last = std::prev(x.end(), (int)i);
+      auto cfirst = std::next(x.cbegin(), (int)i),
+           clast = std::prev(x.cend(), (int)i);
+
+      res = 0;
+      x.visit(first, last, f);
+      auto res1 = res;
+      res = 0;
+      cx.visit(cfirst, clast, cf);
+      auto res2 = res;
+      res = 0;
+      std::for_each(first, last, f);
+      auto res3 = res;
+      BOOST_TEST_EQ(res1, res3);
+      BOOST_TEST_EQ(res2, res3);
+    }
+
+    res = 0;
+    x.visit_all(f);
+    auto res1 = res;
+    res = 0;
+    cx.visit_all(cf);
+    auto res2 = res;
+    res = 0;
+    std::for_each(x.begin(), x.end(), f);
+    auto res3 = res;
+    BOOST_TEST_EQ(res1, res3);
+    BOOST_TEST_EQ(res2, res3);
+  }
+  {
+    Hub        x{rng.begin(), rng.end(), al};
+    const Hub& cx=x;
+    puncture(x);
+
+    unsigned int res = 0;
+    std::size_t  n = 0;
+    auto         f = [&] (value_type& x) {
+      if(!n--) return false;
+      res += (unsigned int)x;
+      return true;
+    };
+    auto         cf = [&] (const value_type& x) { 
+      if(!n--) return false;
+      res += (unsigned int)x;
+      return true;
+    };
+
+    for(std::size_t i = 0; i <= x.size(); ++i) {
+      auto first = std::next(x.begin(), (int)i);
+      auto cfirst = std::next(x.cbegin(), (int)i);
+
+      res = 0;
+      n = std::distance(first, x.end()) / 2;
+      auto it1 = x.visit_while(first, x.end(), f);
+      auto res1 = res;
+      res = 0;
+      n = std::distance(first, x.end()) / 2;
+      auto it2 = cx.visit_while(cfirst, cx.end(), cf);
+      auto res2 = res;
+      res = 0;
+      n = std::distance(first, x.end()) / 2;
+      auto it3 = std::find_if_not(first, x.end(), f);
+      auto res3 = res;
+      BOOST_TEST(it1 == it3);
+      BOOST_TEST_EQ(res1, res3);
+      BOOST_TEST(it2 == it3);
+      BOOST_TEST_EQ(res2, res3);
+    }
+
+    res = 0;
+    n = x.size();
+    auto it1 = x.visit_all_while(f);
+    auto res1 = res;
+    res = 0;
+    n = x.size();
+    auto it2 = cx.visit_all_while(cf);
+    auto res2 = res;
+    res = 0;
+    n = x.size();
+    auto it3 = std::find_if_not(x.begin(), x.end(), f);
+    auto res3 = res;
+    BOOST_TEST(it1 == it3);
+    BOOST_TEST_EQ(res1, res3);
+    BOOST_TEST(it2 == it3);
+    BOOST_TEST_EQ(res2, res3);
+  }
+
   test_global_erase<Hub>(rng, al);
 }
 
