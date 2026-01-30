@@ -96,16 +96,11 @@ _mm_prefetch((const char*)boost::to_address(p), _MM_HINT_T0)
 #define BOOST_HUB_PREFETCH(p) ((void)(p))
 #endif
 
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-#define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
-BOOST_HUB_PREFETCH(pbb)
-#else
 #define BOOST_HUB_PREFETCH_BLOCK(pbb, Block) \
 do{                                          \
   auto p0 = &static_cast<Block&>(*(pbb));    \
   BOOST_HUB_PREFETCH(p0->data());            \
 } while(0)
-#endif
 
 #if defined(BOOST_MSVC)
 #pragma warning(push)
@@ -175,18 +170,6 @@ struct block_base
     return pointer_traits<const_pointer>::pointer_to(x);
   }
 
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-  BOOST_FORCEINLINE void link_available_after(pointer p) noexcept
-  {
-    next_available = p->next_available;
-    p->next_available = pointer_to(*this);
-  }
-
-  BOOST_FORCEINLINE void unlink_available_after(pointer p) noexcept
-  {
-    p->next_available = next_available;
-  }
-#else
   BOOST_FORCEINLINE void link_available_before(pointer p) noexcept
   {
     next_available = p;
@@ -208,7 +191,6 @@ struct block_base
     prev_available->next_available = next_available;
     next_available->prev_available = prev_available;
   }
-#endif
 
   BOOST_FORCEINLINE void link_before(pointer p) noexcept
   {
@@ -232,12 +214,8 @@ struct block_base
     next->prev = prev;
   }
 
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-  pointer   next_available,
-#else
   pointer   prev_available,
             next_available,
-#endif
             prev,
             next;
   mask_type mask;
@@ -248,39 +226,19 @@ struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
   using super = block_base<pointer_rebind_t<ValuePointer, void>>;
 
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-  using super::N;
-  using value_type = typename pointer_traits<ValuePointer>::element_type;
-
-  ValuePointer data() noexcept 
-  {
-    return pointer_traits<ValuePointer>::pointer_to(
-      *reinterpret_cast<value_type*>(data_));
-  }
-
-  alignas(value_type) unsigned char data_[sizeof(value_type) * N];
-#else
   ValuePointer data() noexcept { return data_; }
   ValuePointer data_;
-#endif
 };
 
-#if !defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
 template<typename ValuePointer>
 void swap_payload(block<ValuePointer>& x, block<ValuePointer>& y) noexcept
 {
   std::swap(x.mask, y.mask);
   std::swap(x.data_, y.data_);
 }
-#endif
 
 template<typename ValuePointer>
-struct block_list: 
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-  block<ValuePointer>::super
-#else
-  block<ValuePointer>
-#endif
+struct block_list: block<ValuePointer>
 {
   using block = detail::block<ValuePointer>;
   using block_base = typename block::super;
@@ -289,16 +247,12 @@ struct block_list:
   using block_pointer = pointer_rebind_t<ValuePointer, block>;
   using block_base::full;
   using block_base::pointer_to;
-#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
   using block_base::prev_available;
-#endif
   using block_base::next_available;
   using block_base::prev;
   using block_base::next;
   using block_base::mask;
-#if !defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
   using block::data_;
-#endif
 
   static block_pointer 
   static_cast_block_pointer(block_base_pointer pbb) noexcept
@@ -311,24 +265,16 @@ struct block_list:
   { 
     reset();
     mask = 1; /* sentinel */
-#if !defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
     data_ = nullptr;
-#endif
   }
 
   block_list(block_list&& x) noexcept: block_list{}
   {
     if(x.next_available != x.header()) {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-      next_available = x.next_available;
-      last_available = x.last_available;
-      last_available->next_available = header();
-#else
       prev_available = x.prev_available;
       next_available = x.next_available;
       next_available->prev_available = header();
       prev_available->next_available = header();
-#endif
     }
     if(x.prev != x.header()) {
       prev = x.prev;
@@ -343,16 +289,10 @@ struct block_list:
   {
     reset();
     if(x.next_available != x.header()) {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-      next_available = x.next_available;
-      last_available = x.last_available;
-      last_available->next_available = header();
-#else
       prev_available = x.prev_available;
       next_available = x.next_available;
       next_available->prev_available = header();
       prev_available->next_available = header();
-#endif
     }
     if(x.prev != x.header()) {
       prev = x.prev;
@@ -366,17 +306,10 @@ struct block_list:
 
   void reset() noexcept
   {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    next_available = header();
-    prev = header();
-    next = header();
-    last_available = header();
-#else
     prev_available = header();
     next_available = header();
     prev = header();
     next = header();
-#endif
   }
 
   block_base_pointer header() noexcept 
@@ -419,64 +352,18 @@ struct block_list:
 
   BOOST_FORCEINLINE void link_available_at_back(block_pointer pb) noexcept 
   {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    pb->link_available_after(last_available);
-    last_available = pb;
-#else
     pb->link_available_before(header());
-#endif
   }
 
   BOOST_FORCEINLINE void link_available_at_front(block_pointer pb) noexcept 
   {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    if(last_available == header()) last_available = pb;
     pb->link_available_after(header());
-#else
-    pb->link_available_after(header());
-#endif
   }
 
   BOOST_FORCEINLINE void unlink_available(block_pointer pb) noexcept
   {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    BOOST_ASSERT(next_available == pb);
-    pb->unlink_available_after(header());
-    if(last_available == pb) last_available = header();
-    BOOST_HUB_PREFETCH(next_available);
-#else
     pb->unlink_available();
-#endif
   }
-
-  BOOST_FORCEINLINE void unlink_available_after(
-    block_pointer pb, block_base_pointer pbb_prev) noexcept
-  {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    pb->unlink_available_after(pbb_prev);
-    if(last_available == pb) last_available = header();
-#else
-    (void)pbb_prev;
-    unlink_available(pb);
-#endif
-  }
-
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-  void purge_unavailable() noexcept
-  {
-    for(auto pbb_prev = header(), pbb = pbb_prev->next_available;
-        pbb != header(); ) {
-      auto pb = static_cast_block_pointer(pbb);
-      pbb = pbb->next_available;
-      if(pb->mask == full) unlink_available_after(pb, pbb_prev);
-      else pbb_prev = pb;
-    }
-  }
-#endif
-
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-  block_base_pointer last_available;
-#endif
 };
 
 template<typename ValuePointer>
@@ -1036,15 +923,11 @@ public:
 
   size_type max_size() const noexcept 
   {
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-    return (size_type)(allocator_max_size(al()) * N);
-#else
     std::size_t
       bs = (std::size_t)allocator_max_size(al()) * sizeof(block),
       vs = (std::size_t)allocator_max_size(Allocator(al())) * sizeof(T);
     return 
       (size_type)((std::min)(bs, vs) / (sizeof(block) + sizeof(T) * N) * N);
-#endif
   }
   
   size_type capacity() const noexcept { return num_blocks * N; }
@@ -1061,7 +944,7 @@ public:
 
   void shrink_to_fit()
   {
-    compact();
+    compact([&] (block_pointer pb) {});
     trim_capacity();
   }
 
@@ -1072,17 +955,14 @@ public:
     /* Linear on # available blocks, std::hive is linear on # _reserved_
      * blocks.
      */
-    for(auto pbb_prev = blist.header(), pbb = pbb_prev->next_available;
+    for(auto pbb = blist.header()->next_available;
         capacity() > n && pbb != blist.header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
-         blist.unlink_available_after(pb, pbb_prev);
+         blist.unlink_available(pb);
          delete_block(pb);
          --num_blocks;
-      }
-      else {
-        pbb_prev = pb;
       }
     }
   }
@@ -1209,37 +1089,20 @@ public:
   {
     BOOST_ASSERT(this != &x);
     BOOST_ASSERT(al() == x.al());
-    /* non-full blocks */
-    for(auto pbb_prev = x.blist.header(), pbb = pbb_prev->next_available;
-        pbb != x.blist.header(); ) {
-      auto pb = static_cast_block_pointer(pbb);
-      pbb = pbb->next_available;
-      if(pb->mask != 0) {
-        x.blist.unlink_available_after(pb, pbb_prev);
-        blist.link_available_at_front(pb);
-        x.blist.unlink(pb);
-        blist.link_at_back(pb);
-        --x.num_blocks;
-        ++num_blocks;
-        auto s = core::popcount(pb->mask);
-        x.size_ -= s;
-        size_ += s;
-      }
-      else {
-        pbb_prev = pb;
-      }
-    }
-    /* full blocks remaining */
-    for(auto pbb = x.blist.next; pbb != x.blist.header(); ) {
-      BOOST_ASSERT(pbb->mask == full);
+    for(auto pbb = x.blist.header()->next; pbb != x.blist.header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb->next;
+      if(pb->mask != full) {
+        x.blist.unlink_available(pb);
+        blist.link_available_at_front(pb);
+      }
       x.blist.unlink(pb);
       blist.link_at_back(pb);
       --x.num_blocks;
       ++num_blocks;
-      x.size_ -= N;
-      size_ += N;
+      auto s = core::popcount(pb->mask);
+      x.size_ -= s;
+      size_ += s;
     }
   }
 
@@ -1290,7 +1153,6 @@ public:
   void compact_sort(Compare comp = Compare())
   {
     /* compact elements and build an array of pointers to data chunks of N */
-#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
@@ -1306,25 +1168,6 @@ public:
       std::sort(
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
     }
-#else
-    using sort_iterator = detail::sort_iterator<T, N>;
-
-    if(size_ > 1) {
-      compact();
-
-      std::size_t n = (std::size_t)((size_ + N - 1) / N);
-      detail::nodtor_unique_ptr<T*[]> p
-        {static_cast<T**>(::operator new[](n * sizeof(T*)))};
-      std::size_t i = 0;
-      for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb->next) {
-        p[i++] = boost::to_address(static_cast_block_pointer(pbb)->data());
-      }
-      BOOST_ASSERT(i == n);
-
-      std::sort(
-        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
-    }
-#endif
   }
 
   struct sort_proxy
@@ -1518,15 +1361,6 @@ private:
     hub& x;
   };
 
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-  struct purge_unavailable_on_exit
-  {
-    ~purge_unavailable_on_exit() { x.blist.purge_unavailable(); }
-
-    hub& x;
-  };
-#endif
-
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept:
     allocator_base{empty_init, al_}, blist{std::move(x.blist)},
@@ -1593,13 +1427,6 @@ private:
 
   block_pointer create_new_available_block()
   {
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-    auto pb = allocator_allocate(al(), 1);
-    pb->mask = 0;
-    blist.link_available_at_back(pb);
-    ++num_blocks;
-    return pb;
-#else
     auto pb = allocator_allocate(al(), 1);
     pb->mask = 0;
     BOOST_TRY {
@@ -1614,18 +1441,13 @@ private:
     blist.link_available_at_back(pb);
     ++num_blocks;
     return pb;
-#endif
   }
 
   void delete_block(block_pointer pb) noexcept
   {
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-    allocator_deallocate(al(), pb, 1);
-#else
     allocator_rebind_t<Allocator, value_type> val(al());
     allocator_deallocate(val, pb->data(), N);
     allocator_deallocate(al(), pb, 1);
-#endif
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
@@ -1750,15 +1572,6 @@ private:
     int  n = 0;
     if(first != last) {
       /* consume active blocks */
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-      /* When the available list is forward only, we need to purge it after
-       * traversal cause unlink_available(pb) requires that pb be the first
-       * available block, which is generally not the case when pb has been
-       * reached through the _active_ list.
-       */
-      purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
-#endif
-
       for(; pbb != blist.header(); pbb = pbb->next, n = 0) {
         auto pb = static_cast_block_pointer(pbb);
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
@@ -1769,9 +1582,7 @@ private:
             construct(boost::to_address(pb->data() + n), first++);
             ++size_;
             pb->mask |= bit;
-#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
             if(pb->mask == full) blist.unlink_available(pb);
-#endif
           }
           if(first == last) goto exit;
         }
@@ -1789,7 +1600,6 @@ private:
     }
   }
 
-#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
   template<typename Track>
   void compact(Track track)
   {
@@ -1826,57 +1636,14 @@ private:
       pbbx = pbby;
     }
   }
-#endif
-
-  void compact()
-  {
-#if defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-    /* When the available list is forward only, we need to purge it after
-     * traversal cause unlink_available(pb) requires that pb be the first
-     * available block, which is generally not the case because we skip
-     * available, empty blocks.
-     */
-     purge_unavailable_on_exit on_exit{*this}; (void)on_exit;
-#endif
-    for(auto pbbx = blist.next_available; pbbx != blist.header(); ) {
-      auto pbx = static_cast_block_pointer(pbbx);
-      auto pbby = pbbx->next_available;
-      if(pbx->mask != 0) {
-        do{
-          while(pbby->mask == 0) pbby = pbby->next_available;
-          if(pbby == blist.header()) {
-            compact(pbx);
-            blist.unlink(pbx);
-            blist.link_at_back(pbx);
-            return;
-          }
-          else{
-            auto pby = static_cast_block_pointer(pbby);
-            compact(pbx,pby);
-            if(pby->mask == 0) blist.unlink(pby);
-          }
-        }while(pbx->mask != full);
-#if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
-        blist.unlink_available(pbx);
-#endif
-      }
-      pbbx = pbby;
-    }
-  }
 
   void compact(block_pointer& pbx, block_pointer& pby)
   {
     auto cx = core::popcount(pbx->mask),
          cy = core::popcount(pby->mask);
     if(cx < cy) {
-#if defined(BOOST_HUB_ENABLE_CONTIGUOUS_BLOCK)
-      std::swap(cx, cy);
-      blist.swap(pbx, pby);
-      std::swap(pbx, pby);
-#else
       std::swap(cx, cy);
       swap_payload(*pbx, *pby);
-#endif
     }
     auto c = (std::min)(N - cx, cy);
     while(c--) {
