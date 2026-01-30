@@ -223,7 +223,7 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, rng);
     test_equal(y, rng);
   }
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
   {
     Hub x = noalloc_construct<Hub>(al, boost::container::from_range, rng),
         y{boost::container::from_range, rng, al};
@@ -277,7 +277,7 @@ void test(const typename Hub::allocator_type& al = {})
     x.assign(rng.begin(), rng.end());
     test_equal(x, rng);
   }
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
   {
     Hub x(zeros.size(), al);
     x.assign_range(rng);
@@ -421,7 +421,7 @@ void test(const typename Hub::allocator_type& al = {})
     x.insert(il);
     test_equal(x, il);
   }
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
   {
     Hub x{al};
     x.insert_range(rng);
@@ -657,7 +657,7 @@ void test_ctad()
     test_equal(x3, rng);
     test_equal(x4, rng);
   }
-#if !defined(BOOST_HUB_NO_RANGES)
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
   {
     std::vector<int> rng({0, 1, 2, 3});
     Hub x{boost::container::from_range, rng}; 
