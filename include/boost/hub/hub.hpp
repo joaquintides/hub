@@ -48,8 +48,8 @@
 
 #if !defined(BOOST_HUB_DISABLE_SSE2)
 #if defined(BOOST_HUB_ENABLE_SSE2)|| \
-    defined(__SSE2__)|| \
-    defined(_M_X64)||(defined(_M_IX86_FP)&&_M_IX86_FP>=2)
+    defined(__SSE2__) || \
+    defined(_M_X64) || (defined(_M_IX86_FP)&&_M_IX86_FP>=2)
 #define BOOST_HUB_SSE2
 #endif
 #endif
@@ -1263,11 +1263,35 @@ public:
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
   {
+    /* transfer_sort is usually the fastest, but it consumes the most
+     * auxiliary memory when sizeof(T) > sizeof(sort_proxy), so we restrict
+     * its usage to the case sizeof(T) <= sizeof(sort_proxy).
+     * compact_sort uses the least amount of auxiliary memory (by far), and
+     * it's also faster than proxy_sort when the auxiliary memory of the latter
+     * exceeds some threshold seemingly related to the size of the L2 cache;
+     * we conventionally set the threshold to 2MB for lack of a more precise
+     * estimation mechanism.
+     */
+    BOOST_IF_CONSTEXPR(sizeof(T) <= sizeof(sort_proxy)) {
+      if(transfer_sort(comp)) return;
+    }
+    else{
+      static constexpr std::size_t memory_threshold = 2 * 1024 * 1024;
+      if((std::size_t)size_ * sizeof(sort_proxy) <= memory_threshold) {
+        if(proxy_sort(comp)) return;
+      }
+    }
+    compact_sort(comp);
+  }
+
+  template<typename Compare = std::less<T>>
+  void compact_sort(Compare comp = Compare())
+  {
+    /* compact elements and build an array of pointers to data chunks of N */
 #if !defined(BOOST_HUB_ENABLE_FORWARD_AVAILABLE_LIST)
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
-      /* compact elements and build an array of pointers to data chunks of N */
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
       detail::nodtor_unique_ptr<T*[]> p
         {static_cast<T**>(::operator new[](n * sizeof(T*)))};
@@ -1284,7 +1308,6 @@ public:
     using sort_iterator = detail::sort_iterator<T, N>;
 
     if(size_ > 1) {
-      /* compact elements and build an array of pointers to data chunks of N */
       compact();
 
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
@@ -1302,19 +1325,29 @@ public:
 #endif
   }
 
-  template<typename Compare = std::less<T>>
-  void sort2(Compare comp = Compare())
+  struct sort_proxy
   {
-    struct proxy
-    {
-      T*        p;
-      size_type n;
-    };
+    T*        p;
+    size_type n;
+  };
 
+  template<typename Compare = std::less<T>>
+  bool proxy_sort(Compare comp = Compare())
+  {
+    /* sort an array of (pointer, index) pairs and relocate according to it */
     if(size_ > 1) {
-      /* sort an array of (pointer, index) pairs and relocate according to it */
-      detail::nodtor_unique_ptr<proxy[]> p
-        {static_cast<proxy*>(::operator new[](size_ * sizeof(proxy)))};
+      using unique_ptr = detail::nodtor_unique_ptr<sort_proxy[]>;
+
+      unique_ptr p;
+      BOOST_TRY {
+        p = unique_ptr{
+          static_cast<sort_proxy*>(
+            ::operator new[](size_ * sizeof(sort_proxy)))};
+      }
+      BOOST_CATCH(const std::bad_alloc&) {
+        return false;
+      }
+      BOOST_CATCH_END
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
@@ -1322,7 +1355,8 @@ public:
       });
 
       std::sort(
-        p.get(), p.get() + size_, [&] (const proxy& x, const proxy& y) {
+        p.get(), p.get() + size_, 
+        [&] (const sort_proxy& x, const sort_proxy& y) {
           return comp(const_cast<const T&>(*x.p), const_cast<const T&>(*y.p)); 
         });
 
@@ -1342,39 +1376,29 @@ public:
         }
       }
     }
+    return true;
   }
 
   template<typename Compare = std::less<T>>
-  void sort3(Compare comp = Compare())
+  bool transfer_sort(Compare comp = Compare())
   {
     /* transfer to a vector, sort and transfer back */
     using vector = std::vector<
       T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
     vector v(
       typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
-    v.reserve(size_);
+    BOOST_TRY {
+      v.reserve(size_);
+    }
+    BOOST_CATCH(const std::bad_alloc&) {
+      return false;
+    }
+    BOOST_CATCH_END
     visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
     std::sort(v.begin(), v.end(), comp);
     size_type i = 0;
     visit_all([&] (value_type& x) { x = std::move(v[i++]); });
-  }
-
-  template<typename Compare = std::less<T>>
-  void sort4(Compare comp = Compare())
-  {
-    /* destructively transfer to a vector, sort and insert back */
-    using vector = std::vector<
-      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
-    vector v(
-      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
-    v.reserve(size_);
-    erase_if(*this, [&] (const value_type& x) { 
-      v.push_back(std::move(const_cast<value_type&>(x)));
-      return true;
-    });
-    std::sort(v.begin(), v.end(), comp);
-    insert(
-      std::make_move_iterator(v.begin()), std::make_move_iterator(v.end()));
+    return true;
   }
 
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
@@ -1772,12 +1796,14 @@ private:
       auto pbby = pbbx->next;
       if(pbx->mask != full) {
         do{
-          while(pbby->mask == full) {
-            track(static_cast_block_pointer(pbby));
-            pbby = pbby->next;
+          if(pbby->mask == full) {
+            do {
+              track(static_cast_block_pointer(pbby));
+              pbby = pbby->next;
+            } while(pbby->mask == full);
+            blist.unlink(pbx);
+            blist.link_before(pbx, static_cast_block_pointer(pbby));
           }
-          blist.unlink(pbx);
-          blist.link_before(pbx, static_cast_block_pointer(pbby));
           if(pbby == blist.header()) {
             compact(pbx);
             track(pbx);
