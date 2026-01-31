@@ -357,18 +357,6 @@ struct block_list: block<ValuePointer>
     pb->unlink();
   }
 
-  BOOST_FORCEINLINE 
-  static void swap(block_pointer pbx, block_pointer pby) noexcept
-  {
-    auto pbx_prev = pbx->prev,
-         pby_next = pby->next;
-    unlink(pbx);
-    unlink(pby);
-    pby->link_after(pbx_prev);
-    pbx->link_before(pby_next);
-  }
-
-
   BOOST_FORCEINLINE void link_available_at_back(block_pointer pb) noexcept 
   {
     pb->link_available_before(header());
