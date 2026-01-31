@@ -30,16 +30,8 @@ struct tidy_int
   int n;
 };
 
-template<class T>
-struct type_identity { using type = T; };
-
-template<class T>
-using type_identity_t = typename type_identity<T>::type;
-
-/* type_identity_t used to silence injected-class-name warn by icpx */
 template<typename Hub>
-using erase_callback =
-  std::function<void(type_identity_t<typename Hub::iterator>)>;
+using erase_callback = std::function<void(typename Hub::iterator)>;
 
 template<typename Hub>
 struct track_info
@@ -89,7 +81,7 @@ bool check_stability(F f, track_info_vector<Hub>&& track = {})
 
   call_optionally_with(
     f,
-    erase_callback<iterator>{[&] (iterator it) {
+    erase_callback<Hub>{[&] (iterator it) {
       track.erase(std::find_if(
         track.begin(), track.end(),
         [&] (const track_info<Hub>& info) { return info.it == it; }));
@@ -120,8 +112,7 @@ template<typename Hub>
 void test()
 {
   using value_type = typename Hub::value_type;
-  using iterator = typename Hub::iterator;
-  using erase_callback = ::erase_callback<iterator>;
+  using erase_callback = ::erase_callback<Hub>;
 
   auto rng = make_range<value_type>(200);
 
