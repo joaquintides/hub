@@ -7,8 +7,8 @@ the current reference implementation of this standard component.
 ## Motivation
 
 `std::hive` was [accepted into C++26](https://herbsutter.com/2025/02/17/trip-report-february-2025-iso-c-standards-meeting-hagenberg-austria)
-in February 2025. As of this writing, no major standard library
-implementor is providing it yet, though the work to do so is ongoing. Matthew Bentley's
+in February 2025. As of this writing, no major standard library implementor is providing
+this container yet, though the work to do so is ongoing. Matthew Bentley's
 [`plf::hive`](https://github.com/mattreecebentley/plf_hive) is the de facto reference
 implementation. Two important decisions in the [design of `plf::hive`](https://plflib.org/colony.htm#details)
 are:
@@ -69,3 +69,7 @@ _internal visitation_ functions `visit`,  `visit_while`, `visit_all` and
 iteration thanks to a combination of unrolling and prefetching techniques.
 * `erase_void` is an alternative to `erase` that does not return an iterator
 to the next element, thus saving some potential runtime overhead.
+
+## Performance
+
+TBW
