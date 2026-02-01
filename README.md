@@ -1,7 +1,7 @@
 # Hub container
 
 `boost::container::hub` (proposed for Boost.Container) is a nearly drop-in replacement
-of [`std::hive`](https://eel.is/c++draft/sequences#hive) with better performance than
+of [`std::hive`](https://eel.is/c++draft/sequences#hive) with a more compact design than
 the current reference implementation of this standard container.
 
 * [Motivation](#motivation)
@@ -279,11 +279,11 @@ template<typename T>
 } // namespace boost
 ```
 
-* The library requires C++11 at a minimum.
-  * User-defined deduction guides are ony available if the compiler supports CTAD. 
-  * range-related operations are only available if the standard library provides
-    `<ranges>` and `<concepts>`.
-  * `boost::container::pmr::hub` is only available if the standard library provides
-    `<memory_resource>`.
-* `from_range_t` is equal to  C++23 [`std::from_range_t`](https://en.cppreference.com/w/cpp/ranges/from_range.html)
-if this is provided; otherwise, it is a different type with the same characteristics.
+* The library requires C++11 at a minimum. `std::uint64_t` must exist.
+* User-defined deduction guides are ony available if the compiler supports CTAD. 
+* range-related operations are only available if the standard library provides
+  `<ranges>` and `<concepts>`. If this is the case, `boost::container::from_range_t`
+  is equal to  C++23 [`std::from_range_t`](https://en.cppreference.com/w/cpp/ranges/from_range.html)
+  if this is provided; otherwise, it is a different type with the same characteristics.
+* `boost::container::pmr::hub` is only available if the standard library provides
+  `<memory_resource>`.
