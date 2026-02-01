@@ -280,7 +280,7 @@ template<typename T>
 ```
 
 * The library requires C++11 at a minimum.
-  * User defined deduction guides are ony available if the compiler supports CTAD. 
+  * User-defined deduction guides are ony available if the compiler supports CTAD. 
   * range-related operations are only available if the standard library provides
     `<ranges>` and `<concepts>`.
   * `boost::container::pmr::hub` is only available if the standard library provides
