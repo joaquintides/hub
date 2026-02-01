@@ -52,8 +52,8 @@ element array) and a mask of type `std::uint64_t`, yielding a total overhead of
 6 bits per slot (in 64-bit mode). Locating an occupied (resp. free) slot in a given
 block can be effectively accomplished in constant time with
 [`std::countr_zero(mask)`](https://en.cppreference.com/w/cpp/numeric/countr_zero.html)
-(resp. `std::countr_one(mask)`). It is not hard to see that iteration, insertion
-and erasure can also be implemented in (non-amortized) constant time.
+(resp. `std::countr_one(mask)`). It is not hard to see that insertion, erasure and
+iterator increment can also be implemented in (non-amortized) constant time.
 
 ## Deviations from `std::hive`
 
@@ -83,7 +83,7 @@ to the next element, thus saving some potential runtime overhead.
 
 ## Performance
 
-Benchmarks of `boost::container::hub` vs. `plf::hive`are run as GitHub Actions jobs in a
+Benchmarks of `boost::container::hub` vs. `plf::hive` are run as GitHub Actions jobs in a
 [dedicated repo](https://github.com/boostorg/boost_hub_benchmarks). Execution times for
 the following scenarios are measured:
 
@@ -207,6 +207,7 @@ public:
   void insert(size_type n, const T& x);
 
   iterator erase(const_iterator position);
+  void erase_void(const_iterator position);
   iterator erase(const_iterator first, const_iterator last);
   void swap(hub&)
     noexcept(std::allocator_traits<Allocator>::propagate_on_container_swap::value ||
@@ -277,3 +278,12 @@ template<typename T>
 } // namespace container
 } // namespace boost
 ```
+
+* The library requires C++11 at a minimum.
+  * User defined deduction guides are ony available if the compiler supports CTAD. 
+  * range-related operations are only available if the standard library provides
+    `<ranges>` and `<concepts>`.
+  * `boost::container::pmr::hub` is only available if the standard library provides
+    `<memory_resource>`.
+* `from_range_t` is equal to  C++23 [`std::from_range_t`](https://en.cppreference.com/w/cpp/ranges/from_range.html)
+if this is provided; otherwise, it is a different type with the same characteristics.
