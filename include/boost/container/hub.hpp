@@ -136,7 +136,7 @@ inline int unchecked_countr_zero(std::uint64_t x)
 {
 #if defined(BOOST_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
   unsigned long r;
-  _BitScanForward64(&r,x);
+  _BitScanForward64(&r, x);
   return (int)r;
 #elif defined(BOOST_GCC) || defined(BOOST_CLANG)
   return (int)__builtin_ctzll(x);
@@ -155,7 +155,7 @@ inline int unchecked_countl_zero(std::uint64_t x)
 {
 #if defined(BOOST_MSVC) && (defined(_M_X64) || defined(_M_ARM64))
   unsigned long r;
-  _BitScanReverse64(&r,x);
+  _BitScanReverse64(&r, x);
   return (int)(63 - r);
 #elif defined(BOOST_GCC) || defined(BOOST_CLANG)
   return (int)__builtin_clzll(x);
@@ -954,7 +954,7 @@ public:
 
   void shrink_to_fit()
   {
-    compact([&] (block_pointer pb) {});
+    compact([] (block_pointer) {});
     trim_capacity();
   }
 
