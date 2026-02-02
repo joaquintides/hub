@@ -946,7 +946,10 @@ template<
   hub(InputIterator, InputIterator, Allocator = Allocator())
     -> hub<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
 
-template<std::ranges::input_range R, typename Allocator = allocator<std::ranges::range_value_t<R>>>
+template<
+  std::ranges::input_range R,
+  typename Allocator = std::allocator<std::ranges::range_value_t<R>>
+>
   hub(from_range_t, R&&, Allocator = Allocator())
     -> hub<std::ranges::range_value_t<R>, Allocator>;
 
