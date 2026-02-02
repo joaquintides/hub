@@ -5,6 +5,7 @@ of [`std::hive`](https://eel.is/c++draft/sequences#hive) with a more compact des
 the current reference implementation of this standard container.
 
 * [Motivation](#motivation)
+* [Deviations from `std::hive`](#deviations-from-stdhive)
 * [Performance](#performance)
   * [GCC 15, x64](#gcc-15-x64)
   * [Clang 20, x64](#clang-20-x64)
@@ -80,6 +81,13 @@ _internal visitation_ functions `visit`,  `visit_while`, `visit_all` and
 iteration thanks to a combination of unrolling and prefetching techniques.
 * `erase_void` is an alternative to `erase` that does not return an iterator
 to the next element, thus saving some potential runtime overhead.
+* The `end` iterator is stable and non-transferable, whereas for `std::hive`
+the `end` iterator is invalidated upon any insertion or the erasure of the last
+element (briefly put,
+`boost::container::hub::end` behaves like `std::list::end` whereas
+`std::hive::end` behaves like `std::vector::end`). Technically, this is
+not a non-conformance but rather an extension to the specification of
+`std::hive`.
 
 ## Performance
 
@@ -936,7 +944,7 @@ template<
   typename Allocator = std::allocator<typename std::iterator_traits<InputIterator>::value_type>
 >
   hub(InputIterator, InputIterator, Allocator = Allocator())
-    -> hub<iter-value-type<InputIterator>, Allocator>;
+    -> hub<typename std::iterator_traits<InputIterator>::value_type, Allocator>;
 
 template<std::ranges::input_range R, typename Allocator = allocator<std::ranges::range_value_t<R>>>
   hub(from_range_t, R&&, Allocator = Allocator())
