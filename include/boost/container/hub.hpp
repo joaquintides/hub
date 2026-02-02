@@ -1513,8 +1513,8 @@ private:
     }
   }
 
-  template<typename Compare = std::less<T>>
-  bool transfer_sort(Compare comp = Compare())
+  template<typename Compare>
+  bool transfer_sort(Compare comp)
   {
     /* transfer to a vector, sort and transfer back */
     using vector = std::vector<
@@ -1541,8 +1541,8 @@ private:
     size_type n;
   };
 
-  template<typename Compare = std::less<T>>
-  bool proxy_sort(Compare comp = Compare())
+  template<typename Compare>
+  bool proxy_sort(Compare comp)
   {
     /* sort an array of (pointer, index) pairs and relocate according to it */
     if(size_ > 1) {
@@ -1589,8 +1589,8 @@ private:
     return true;
   }
 
-  template<typename Compare = std::less<T>>
-  void compact_sort(Compare comp = Compare())
+  template<typename Compare>
+  void compact_sort(Compare comp)
   {
     /* compact elements and build an array of pointers to data chunks of N */
     using sort_iterator = hub_detail::sort_iterator<T, N>;
