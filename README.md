@@ -63,7 +63,7 @@ a few aspects:
 
 * Minimum and maximum block size limits can't be specified and are fixed to 64.
 `reshape` is not provided as it doesn't make sense when block capacity is fixed.
-* `trim_capacity` is linear on the number of _available_ locks
+* `trim_capacity` is linear on the number of _available_ blocks
 (`std::hive::trim_capacity` is linear on the number of _reserved_ blocks,
 i.e. those without any used slot).
 * Iterators are not
