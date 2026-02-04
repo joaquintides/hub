@@ -712,6 +712,30 @@ using enable_if_is_input_iterator_t =
     >::value
   >::type;
 
+template<typename Allocator, typename Ptr, typename = void>
+struct allocator_has_destroy: std::false_type {};
+
+template<typename Allocator, typename Ptr>
+struct allocator_has_destroy<
+  Allocator, Ptr,
+  decltype((void)std::declval<Allocator&>().destroy(std::declval<Ptr>()))
+>: std::true_type {};
+
+template<typename Allocator>
+struct is_std_allocator: std::false_type {};
+
+template<typename T>
+struct is_std_allocator<std::allocator<T>>: std::true_type {};
+
+template<typename Allocator>
+struct is_std_pmr_polymorphic_allocator: std::false_type {};
+
+#ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
+template<typename T>
+struct is_std_pmr_polymorphic_allocator<std::pmr::polymorphic_allocator<T>>:
+  std::true_type {};
+#endif
+
 struct if_constexpr_void_else{ void operator()() const {} };
 
 template<typename F, typename G = if_constexpr_void_else>
@@ -1379,24 +1403,27 @@ private:
   size_type destroy_all_in_nonempty_block(block_pointer pb) noexcept
   {
     BOOST_ASSERT(pb->mask != 0);
-    return destroy_all_in_nonempty_block(
-      pb, std::is_trivially_destructible<T>{});
+    return destroy_all_in_nonempty_block(pb, std::integral_constant<bool,
+      std::is_trivially_destructible<T>::value &&
+      ( hub_detail::is_std_allocator<block_allocator>::value ||
+        hub_detail::is_std_pmr_polymorphic_allocator<block_allocator>::value ||
+       !hub_detail::allocator_has_destroy<block_allocator, T*>::value )>{});
   }
 
   size_type destroy_all_in_nonempty_block(
-    block_pointer pb, std::true_type /* trivially destructible */) noexcept
+    block_pointer pb, std::true_type /* trivial destruction */) noexcept
   {
     return (size_type)core::popcount(pb->mask);
   }
 
   size_type destroy_all_in_nonempty_block(
-    block_pointer pb, std::false_type /* ~trivially destructible */) noexcept
+    block_pointer pb, std::false_type /* use allocator_destroy */) noexcept
   {
     size_type s = 0;
     auto      mask = pb->mask;
     do {
       auto n = hub_detail::unchecked_countr_zero(mask);
-      allocator_destroy(al(), pb->data() + n);
+      allocator_destroy(al(), boost::to_address(pb->data() + n));
       ++s;
       mask &= mask - 1;
     } while(mask);
