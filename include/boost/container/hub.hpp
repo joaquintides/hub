@@ -25,10 +25,8 @@
 #include <iterator>
 #include <memory>
 #include <new>
-#include <scoped_allocator>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
 #include <memory_resource>
@@ -631,6 +629,47 @@ struct sort_iterator
 
   T** pp;
   std::size_t index;
+};
+
+template<typename T, typename Allocator>
+struct buffer
+{
+  buffer(std::size_t n, Allocator al_): al{al_} 
+  {
+    data = static_cast<T*>(::operator new[](n * sizeof(T), std::nothrow));
+    if(data) capacity = n;
+  }
+
+  ~buffer()
+  {
+    if(data) {
+      for(; begin_ != end_; ++begin_) allocator_destroy(al, begin());
+      ::operator delete[](data);
+    }
+  }
+  
+  T* begin() const noexcept { return data + begin_; }
+  T* end() const noexcept { return data + end_; }
+
+  template<typename... Args>
+  void emplace_back(Args&&... args)
+  {
+    BOOST_ASSERT(data && end_ != capacity);
+    allocator_construct(al, end(), std::forward<Args>(args)...);
+    ++end_;
+  }
+  
+  void erase_front() noexcept
+  {
+    BOOST_ASSERT(data && begin_ != end_);
+    allocator_destroy(al, begin());
+    ++begin_;
+  }
+  
+  Allocator   al;
+  std::size_t begin_ = 0, end_ = 0;
+  std::size_t capacity = 0;
+  T*          data = nullptr;
 };
 
 template<typename T>
@@ -1543,22 +1582,16 @@ private:
   template<typename Compare>
   bool transfer_sort(Compare comp)
   {
-    /* transfer to a vector, sort and transfer back */
-    using vector = std::vector<
-      T, std::scoped_allocator_adaptor<std::allocator<T>, Allocator>>;
-    vector v(
-      typename vector::allocator_type{std::allocator<T>{}, Allocator(al())});
-    BOOST_TRY {
-      v.reserve(size_);
-    }
-    BOOST_CATCH(const std::bad_alloc&) {
-      return false;
-    }
-    BOOST_CATCH_END
-    visit_all([&] (value_type& x) { v.push_back(std::move(x)); });
-    std::sort(v.begin(), v.end(), comp);
-    size_type i = 0;
-    visit_all([&] (value_type& x) { x = std::move(v[i++]); });
+    /* transfer to a buffer, sort and transfer back */
+    hub_detail::buffer<T,Allocator> buf(size_, al());
+    if(!buf.data) return false;
+
+    visit_all([&] (value_type& x) { buf.emplace_back(std::move(x)); });
+    std::sort(buf.begin(), buf.end(), comp);
+    visit_all([&] (value_type& x) { 
+      x = std::move(*buf.begin());
+      buf.erase_front();
+    });
     return true;
   }
 
@@ -1573,18 +1606,11 @@ private:
   {
     /* sort an array of (pointer, index) pairs and relocate according to it */
     if(size_ > 1) {
-      using unique_ptr = hub_detail::nodtor_unique_ptr<sort_proxy[]>;
+      hub_detail::nodtor_unique_ptr<sort_proxy[]> p
+        {static_cast<sort_proxy*>(
+          ::operator new[](size_ * sizeof(sort_proxy), std::nothrow))};
+      if(!p) return false;
 
-      unique_ptr p;
-      BOOST_TRY {
-        p = unique_ptr{
-          static_cast<sort_proxy*>(
-            ::operator new[](size_ * sizeof(sort_proxy)))};
-      }
-      BOOST_CATCH(const std::bad_alloc&) {
-        return false;
-      }
-      BOOST_CATCH_END
       size_type i = 0;
       visit_all([&] (value_type& x) {
         p[i] = {std::addressof(x), i};
