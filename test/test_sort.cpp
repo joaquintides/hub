@@ -5,6 +5,8 @@
  */
 
 #include <algorithm>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/detail/splitmix64.hpp>
 #include <boost/core/lightweight_test.hpp>
@@ -29,7 +31,9 @@ struct big_nontrivial_int
 
 static_assert(
   !std::is_trivially_destructible<big_nontrivial_int>::value &&
+#if !BOOST_WORKAROUND(BOOST_LIBSTDCXX_VERSION, < 50000)
   !std::is_trivially_copy_constructible<big_nontrivial_int>::value &&
+#endif
   !std::is_trivially_assignable<big_nontrivial_int, big_nontrivial_int>::value,
   "internal check on big_nontrivial_int");
 
