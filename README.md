@@ -10,7 +10,7 @@ the current reference implementation of this standard container.
   * [GCC 15, x64](#gcc-15-x64)
   * [Clang 20, x64](#clang-20-x64)
   * [Clang 17, ARM64](#clang-17-arm64)
-  * [VS 2022, x64](#vs-2002-x64)
+  * [VS 2022, x64](#vs-2022-x64)
   * [GCC 15, x86](#gcc-15-x86)
   * [Clang 20, x86](#clang-20-x86)
   * [VS 2022, x86](#vs-2022-x86)
