@@ -10,18 +10,43 @@
 #include <string>
 #include "utility.hpp"
 
+struct small_allocator_user
+{
+  using allocator_type = stateful_allocator<int>;
+
+  small_allocator_user(const allocator_type& al_): al{al_} {}
+  small_allocator_user(
+    const small_allocator_user&, const allocator_type& al_): al{al_} {}
+
+  operator int() const { return 0; }
+
+  allocator_type al;
+};
+
 int main()
 {
-  using string = std::basic_string<
-    char, std::char_traits<char>, stateful_allocator<char>>;
-  using hub = boost::container::hub<
-    string, std::scoped_allocator_adaptor<stateful_allocator<string>>>;
-  using allocator_type = hub::allocator_type;
+  {
+    using string = std::basic_string<
+      char, std::char_traits<char>, stateful_allocator<char>>;
+    using hub = boost::container::hub<
+      string, std::scoped_allocator_adaptor<stateful_allocator<string>>>;
+    using allocator_type = hub::allocator_type;
 
-  hub h(allocator_type(42));
-  h.emplace("hello");
-  BOOST_TEST(*h.begin() == "hello");
-  BOOST_TEST_EQ(h.begin()->get_allocator().state, 42);
+    hub h(allocator_type(42));
+    h.emplace("hello");
+    BOOST_TEST(*h.begin() == "hello");
+    BOOST_TEST_EQ(h.begin()->get_allocator().state, 42);
+  }
+  {
+    using hub = boost::container::hub<
+      small_allocator_user,
+      std::scoped_allocator_adaptor<stateful_allocator<small_allocator_user>>>;
+    using allocator_type = hub::allocator_type;
+
+    hub h(10, small_allocator_user{allocator_type(0)}, allocator_type(42));
+    h.sort();
+    BOOST_TEST_EQ(h.begin()->al.state, 42);
+  }
 
   return boost::report_errors();
 }
