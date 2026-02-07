@@ -479,7 +479,8 @@ private:
   using block_base = hub_detail::block_base<pointer_rebind_t<void>>;
   using block_base_pointer = pointer_rebind_t<block_base>;
   using const_block_base_pointer = pointer_rebind_t<const block_base>;
-  using block = hub_detail::block<pointer_rebind_t<value_type>>;
+  using non_const_pointer = pointer_rebind_t<value_type>; /* used by Natvis */
+  using block = hub_detail::block<non_const_pointer>;
   using mask_type = typename block_base::mask_type;
 
   static constexpr int N = block_base::N;
