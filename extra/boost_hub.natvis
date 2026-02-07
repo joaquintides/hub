@@ -78,10 +78,10 @@ an intrinsic boost_to_address() returning an equivalent raw pointer.
 
 <Type Name="boost::container::hub_detail::iterator&lt;*&gt;" Inheritable="false">
 	<Intrinsic Name="to_address" Optional="true" Expression="&amp;**p">
-		<Parameter Name="p" Type="non_const_pointer*" />
+		<Parameter Name="p" Type="nonconst_pointer*" />
 	</Intrinsic>
 	<Intrinsic Name="to_address" Optional="true" Expression="p-&gt;boost_to_address()">
-		<Parameter Name="p" Type="non_const_pointer*" />
+		<Parameter Name="p" Type="nonconst_pointer*" />
 	</Intrinsic>
 	<Intrinsic Name="to_address" Optional="true" Expression="&amp;**p">
 		<Parameter Name="p" Type="block_base_pointer*" />
