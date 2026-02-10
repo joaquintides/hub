@@ -53,7 +53,7 @@ class BoostContainerHubProxy:
       yield (pd + n).dereference()
       mask &= mask - 1
       if mask == 0:
-        pbb = BoostContainerHubHelpers.to_address(pbb["next"])
+        pbb = BoostContainerHubHelpers.to_address(pbb.dereference()["next"])
         mask = int(pbb.dereference()["mask"])
       count += 1
 
@@ -67,7 +67,7 @@ class BoostContainerHubProxy:
       m = BoostContainerHubHelpers.popcount(int(pbb.dereference()["mask"]))
       if m <= n:
         n -= m
-        pbb = BoostContainerHubHelpers.to_address(pbb["next"])
+        pbb = BoostContainerHubHelpers.to_address(pbb.dereference()["next"])
       else:
         break
     mask = int(pbb.dereference()["mask"])
