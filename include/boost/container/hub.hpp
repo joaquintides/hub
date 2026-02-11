@@ -1018,7 +1018,7 @@ public:
 
   void shrink_to_fit()
   {
-    compact([] (block_pointer) {});
+    compact();
     trim_capacity();
   }
 
@@ -1663,6 +1663,8 @@ private:
         sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
     }
   }
+
+  void compact() { compact([] (block_pointer) {}); }
 
   template<typename Track>
   void compact(Track track)
