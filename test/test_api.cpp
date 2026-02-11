@@ -171,7 +171,6 @@ void test(const typename Hub::allocator_type& al = {})
   avoid_unused_local_typedef<const_pointer>();
   avoid_unused_local_typedef<reference>();
   avoid_unused_local_typedef<const_reference>();
-  avoid_unused_local_typedef<size_type>();
   avoid_unused_local_typedef<difference_type>();
   avoid_unused_local_typedef<reverse_iterator>();
   avoid_unused_local_typedef<const_reverse_iterator>();
@@ -365,6 +364,10 @@ void test(const typename Hub::allocator_type& al = {})
     x.trim_capacity();
     BOOST_TEST_EQ(cx.capacity(), c);
     test_equal(x, x2);
+
+    if(cx.max_size() < (size_type)(-1)) {
+      BOOST_TEST_THROWS(x.reserve(cx.max_size() + 1), std::length_error);
+    }
   }
 
   /* modifiers */

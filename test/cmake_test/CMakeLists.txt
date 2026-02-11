@@ -18,12 +18,12 @@ else()
       assert
       config
       core
+      throw_exception
       # Secondary dependencies
       move
       static_assert
-      throw_exception
       type_traits
-	)
+    )
 
     foreach(dep IN LISTS deps)
       add_subdirectory(../../../${dep} boostorg/${dep})

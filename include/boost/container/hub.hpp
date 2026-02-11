@@ -18,6 +18,7 @@
 #include <boost/core/empty_value.hpp>
 #include <boost/core/no_exceptions_support.hpp>
 #include <boost/core/pointer_traits.hpp>
+#include <boost/throw_exception.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -25,6 +26,7 @@
 #include <iterator>
 #include <memory>
 #include <new>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -1013,6 +1015,10 @@ public:
 
   void reserve(size_type n)
   {
+    if(n > max_size()) {
+      BOOST_THROW_EXCEPTION(
+        std::length_error("Requested capacity greater than max_size()"));
+    }
     while(capacity() < n) (void)create_new_available_block();
   }
 
