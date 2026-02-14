@@ -1555,11 +1555,12 @@ private:
     Incrementable first, Sentinel last, Construct construct, Insert insert)
   {
     auto pbb = blist.next;
-    int  n = 0;
+    int  n = -1;
     if(first != last) {
       /* consume active blocks */
-      for(; pbb != blist.header(); pbb = pbb->next, n = 0) {
+      for(; pbb != blist.header(); pbb = pbb->next) {
         auto pb = static_cast_block_pointer(pbb);
+        n = 0;
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
           if(pb->mask & bit) { /* full slot */
             insert(boost::to_address(pb->data() + n), first++);
@@ -1581,7 +1582,7 @@ private:
     }
     else{
       /* erase remaining original elements */
-      auto it = (n == 0)? const_iterator{pbb}: ++const_iterator{pbb, n};
+      auto it = (n == -1)? const_iterator{pbb}: ++const_iterator{pbb, n};
       erase(it, cend());
     }
   }

@@ -443,6 +443,18 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, rng);
   }
   {
+    /* boundary conditions in range assignment */
+    Hub x{al};
+
+    x.assign(1, 1);
+    x.assign(0, 1);
+    BOOST_TEST_EQ(x.size(), 0);
+
+    x.assign(65, 1);
+    x.assign(65, 1);
+    BOOST_TEST_EQ(x.size(), 65);
+  }
+  {
     Hub x{rng.begin(), rng.end(), al};
 
     auto it = x.erase(x.cbegin());
