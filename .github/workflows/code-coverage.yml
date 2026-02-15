@@ -85,7 +85,9 @@ jobs:
 
       - name: Adjust gcovr script for boost::container::hub
         run: |
-            sed -i 's|.*/\$REPONAME/.*|.*/container/hub/.*|g' ./ci-automation/scripts/lcov-jenkins-gcc-13.sh
+            sed -i -e 's|.*/\$REPONAME/.*|.*/container/hub/.*|g' \
+                   -e 's|*/boost/\$SELF/*|*/boost/container/hub.hpp|g' \
+                ./ci-automation/scripts/lcov-jenkins-gcc-13.sh
 
       - name: Build and run tests & collect coverage data
         run: |
