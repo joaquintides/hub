@@ -1710,7 +1710,7 @@ private:
     }
   }
 
-  void compact(block_pointer& pbx, block_pointer& pby)
+  void compact(block_pointer pbx, block_pointer pby)
   {
     auto cx = core::popcount(pbx->mask),
          cy = core::popcount(pby->mask);
@@ -1732,7 +1732,7 @@ private:
 
   void compact(block_pointer pb)
   {
-    for(; ;) {
+    for(; ; ) {
       auto n = hub_detail::unchecked_countr_one(pb->mask);
       auto m = N - 1 - hub_detail::unchecked_countl_zero(pb->mask);
       if(n > m) return;
