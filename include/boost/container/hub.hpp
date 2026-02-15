@@ -219,14 +219,6 @@ struct block_base
     prev->next = pointer_to(*this);
   }
 
-  BOOST_FORCEINLINE void link_after(pointer p) noexcept
-  {
-    prev = p;
-    next = p->next;
-    next->prev = pointer_to(*this);
-    prev->next = pointer_to(*this);
-  }
-
   BOOST_FORCEINLINE void unlink() noexcept
   {
     prev->next = next;
