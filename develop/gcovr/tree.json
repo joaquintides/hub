@@ -1,0 +1,103 @@
+[
+  {
+    "name": "libs",
+    "coverage": "",
+    "coverageClass": "coverage-unknown",
+    "linesTotal": "",
+    "linesExec": "",
+    "linesCoverage": "",
+    "linesClass": "",
+    "functionsCoverage": "",
+    "functionsClass": "",
+    "branchesCoverage": "",
+    "branchesClass": "",
+    "isDirectory": true,
+    "link": null,
+    "children": [
+      {
+        "name": "hub",
+        "coverage": "",
+        "coverageClass": "coverage-unknown",
+        "linesTotal": "",
+        "linesExec": "",
+        "linesCoverage": "",
+        "linesClass": "",
+        "functionsCoverage": "",
+        "functionsClass": "",
+        "branchesCoverage": "",
+        "branchesClass": "",
+        "isDirectory": true,
+        "link": null,
+        "children": [
+          {
+            "name": "include",
+            "coverage": "",
+            "coverageClass": "coverage-unknown",
+            "linesTotal": "",
+            "linesExec": "",
+            "linesCoverage": "",
+            "linesClass": "",
+            "functionsCoverage": "",
+            "functionsClass": "",
+            "branchesCoverage": "",
+            "branchesClass": "",
+            "isDirectory": true,
+            "link": null,
+            "children": [
+              {
+                "name": "boost",
+                "coverage": "",
+                "coverageClass": "coverage-unknown",
+                "linesTotal": "",
+                "linesExec": "",
+                "linesCoverage": "",
+                "linesClass": "",
+                "functionsCoverage": "",
+                "functionsClass": "",
+                "branchesCoverage": "",
+                "branchesClass": "",
+                "isDirectory": true,
+                "link": null,
+                "children": [
+                  {
+                    "name": "container",
+                    "coverage": "",
+                    "coverageClass": "coverage-unknown",
+                    "linesTotal": "",
+                    "linesExec": "",
+                    "linesCoverage": "",
+                    "linesClass": "",
+                    "functionsCoverage": "",
+                    "functionsClass": "",
+                    "branchesCoverage": "",
+                    "branchesClass": "",
+                    "isDirectory": true,
+                    "link": null,
+                    "children": [
+                      {
+                        "name": "hub.hpp",
+                        "coverage": "99.6",
+                        "coverageClass": "coverage-high",
+                        "linesTotal": "720",
+                        "linesExec": "717",
+                        "linesCoverage": "99.6",
+                        "linesClass": "coverage-high",
+                        "functionsCoverage": "90.9",
+                        "functionsClass": "coverage-high",
+                        "branchesCoverage": "-",
+                        "branchesClass": "coverage-unknown",
+                        "isDirectory": false,
+                        "link": "index.hub.hpp.74f44dcda92ed899b240c1999ea0d91d.html",
+                        "children": []
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

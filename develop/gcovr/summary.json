@@ -1,0 +1,27 @@
+{
+    "root": "../../boost-root",
+    "gcovr/summary_format_version": "0.6",
+    "files": [
+        {
+            "filename": "boost/container/hub.hpp",
+            "line_total": 720,
+            "line_covered": 717,
+            "line_percent": 99.6,
+            "function_total": 1752,
+            "function_covered": 1593,
+            "function_percent": 90.9,
+            "branch_total": 0,
+            "branch_covered": 0,
+            "branch_percent": null
+        }
+    ],
+    "line_total": 720,
+    "line_covered": 717,
+    "line_percent": 99.6,
+    "function_total": 1752,
+    "function_covered": 1593,
+    "function_percent": 90.9,
+    "branch_total": 0,
+    "branch_covered": 0,
+    "branch_percent": 0.0
+}
