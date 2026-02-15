@@ -83,6 +83,10 @@ jobs:
           repository: cppalliance/ci-automation
           path: ci-automation
 
+      - name: Adjust gcovr script for boost::container::hub
+        run: |
+            sed -i 's|.*/\$REPONAME/.*|.*/container/.*|g' ${{matrix.gcovr_script}}
+
       - name: Build and run tests & collect coverage data
         run: |
             set -xe
