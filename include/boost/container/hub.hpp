@@ -73,16 +73,16 @@
 #define BOOST_CONTAINER_HUB_ASSUME(cond) __builtin_assume(cond)
 #elif defined(__GNUC__) || \
       BOOST_CONTAINER_HUB_HAS_BUILTIN(__builtin_unreachable)
-#define BOOST_CONTAINER_HUB_ASSUME(cond)           \
+#define BOOST_CONTAINER_HUB_ASSUME(cond) \
   do{                                    \
     if(!(cond)) __builtin_unreachable(); \
   } while(0)
 #elif defined(_MSC_VER)
 #define BOOST_CONTAINER_HUB_ASSUME(cond) __assume(cond)
 #else
-#define BOOST_CONTAINER_HUB_ASSUME(cond)          \
-  do{                                   \
-    static_cast<void>(false && (cond)); \
+#define BOOST_CONTAINER_HUB_ASSUME(cond) \
+  do{                                    \
+    static_cast<void>(false && (cond));  \
   } while(0)
 #endif
 
@@ -754,6 +754,16 @@ using enable_if_is_input_iterator_t =
     >::value
   >::type;
 
+/* std::pmr::polymorphic_allocator::destroy may be marked as deprecated */
+#if defined(_LIBCPP_SUPPRESS_DEPRECATED_PUSH)
+_LIBCPP_SUPPRESS_DEPRECATED_PUSH
+#elif defined(_STL_DISABLE_DEPRECATED_WARNING)
+_STL_DISABLE_DEPRECATED_WARNING
+#elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4996)
+#endif
+
 template<typename Allocator, typename Ptr, typename = void>
 struct allocator_has_destroy: std::false_type {};
 
@@ -762,6 +772,14 @@ struct allocator_has_destroy<
   Allocator, Ptr,
   decltype((void)std::declval<Allocator&>().destroy(std::declval<Ptr>()))
 >: std::true_type {};
+
+#if defined(_LIBCPP_SUPPRESS_DEPRECATED_POP)
+_LIBCPP_SUPPRESS_DEPRECATED_POP
+#elif defined(_STL_RESTORE_DEPRECATED_WARNING)
+_STL_RESTORE_DEPRECATED_WARNING
+#elif defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 template<typename Allocator>
 struct is_std_allocator: std::false_type {};
