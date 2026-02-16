@@ -1779,10 +1779,10 @@ private:
     block_base_pointer pbb, block_base_pointer last_pbb, F&& f)
   {
     BOOST_ASSERT(pbb != last_pbb);
-    auto           pb = static_cast_block_pointer(pbb);
-    auto           mask = pb->mask;
-    auto           n = hub_detail::unchecked_countr_zero(mask);
-    auto           pd = pb->data();
+    auto pb = static_cast_block_pointer(pbb);
+    auto mask = pb->mask;
+    auto n = hub_detail::unchecked_countr_zero(mask);
+    auto pd = pb->data();
     do {
       pbb = pb->next;
       auto next_mask = pbb->mask;
