@@ -10,22 +10,6 @@
 #include <type_traits>
 #include "utility.hpp"
 
-template<typename Hub, typename OtherAllocator>
-struct rebind_allocator;
-
-template<
-  template<typename...> class Hub, typename T, typename Allocator,
-  typename OtherAllocator
->
-struct rebind_allocator<Hub<T, Allocator>, OtherAllocator>
-{
-  using type = Hub<T, boost::allocator_rebind_t<OtherAllocator, T>>;
-};
-
-template<typename Hub, typename OtherAllocator>
-using rebind_allocator_t = 
-  typename rebind_allocator<Hub, OtherAllocator>::type;
-
 template<typename Hub, typename Propagate, typename AlwaysEqual>
 void test()
 {

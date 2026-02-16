@@ -247,6 +247,18 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(z, rng);
   }
   {
+    /* move construction with unequal allocators */
+    using hub = rebind_allocator_t<Hub, stateful_allocator<void>>;
+    using allocator_type = typename hub::allocator_type;
+
+    hub x{rng.begin(), rng.end(), allocator_type{0}},
+        y{std::move(x), allocator_type{1}};
+    BOOST_TEST_EQ(x.get_allocator().state, 0);
+    BOOST_TEST(x.empty());
+    BOOST_TEST_EQ(y.get_allocator().state, 1);
+    test_equal(y, rng);
+  }
+  {
     Hub x = noalloc_construct<Hub>(al, il), y{il, al};
     test_equal(x, il);
     test_equal(y, il);

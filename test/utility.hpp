@@ -43,6 +43,22 @@ void puncture(Container& x, EraseCallback callback = EraseCallback())
   }
 }
 
+template<typename Hub, typename OtherAllocator>
+struct rebind_allocator;
+
+template<
+  template<typename...> class Hub, typename T, typename Allocator,
+  typename OtherAllocator
+>
+struct rebind_allocator<Hub<T, Allocator>, OtherAllocator>
+{
+  using type = Hub<T, boost::allocator_rebind_t<OtherAllocator, T>>;
+};
+
+template<typename Hub, typename OtherAllocator>
+using rebind_allocator_t = 
+  typename rebind_allocator<Hub, OtherAllocator>::type;
+
 template<typename T> struct reference_or_void { using type = T&; };
 template<> struct reference_or_void<void> { using type = void; };
 template<> struct reference_or_void<const void> { using type = const void; };
