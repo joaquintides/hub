@@ -1084,11 +1084,11 @@ public:
     auto pb = retrieve_available_block(n);
     allocator_construct(
       al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
-    pb->mask |= pb->mask + 1;
-    if(BOOST_UNLIKELY(pb->mask + 1 <= 2)) {
+    auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
+    if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
-      if(pb->mask == 1) blist.link_at_back(pb);
-      else /* pb->mask == full */  blist.unlink_available(pb);
+      if(mask_plus_one == 0) blist.unlink_available(pb);
+      else /* pb->mask == 1 */ blist.link_at_back(pb);
     }
     ++size_;
     return {pb, n};
