@@ -1465,8 +1465,8 @@ private:
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
-    if(BOOST_LIKELY(blist.next_available != blist.header())){
-      auto pb = static_cast_block_pointer(blist.next_available);
+    auto pb = static_cast_block_pointer(blist.next_available);
+    if(BOOST_LIKELY(pb->data() != nullptr)) {   
       n = hub_detail::unchecked_countr_one(pb->mask);
       return pb;
     }
