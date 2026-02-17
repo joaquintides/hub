@@ -1084,7 +1084,11 @@ public:
     auto pb = retrieve_available_block(n);
     allocator_construct(
       al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+#if 1
+    auto mask_plus_one = (pb->mask |= ((mask_type)(1) << n)) + 1;
+#else
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
+#endif
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
       if(mask_plus_one == 0) blist.unlink_available(pb);
