@@ -31,7 +31,26 @@ the current reference implementation of this standard container.
 pointers/iterators to an element remain valid as long as the element is not erased.
 
 ```cpp
-TBW
+#include <boost/container/hub.hpp>
+#include <cassert>
+
+int main()
+{
+  boost::container::hub<int> h;
+
+  // Insert some elements and keep an iterator to one of them
+  for(int i = 0; i < 100; ++i) h.insert(i);
+  auto it = h.insert(100);
+  for(int i = 101; i < 200; ++i) h.insert(i);
+
+  // Erase some of the elements
+  erase_if(h, [](int x) { return x % 2 != 0;});
+  assert(*it = 100); // iterator still valid
+
+  // Insert many more elements
+  for(int i = 200; i < 10000; ++i) h.insert(i);
+  assert(*it = 100); // iterator still valid
+}
 ```
 
 The observant reader may retort that `std::list` is also stable and provides O(1) insertion/erasure:
@@ -54,7 +73,7 @@ particle simulation and HFT come to mind.
 ## Getting started
 
 Consult the website [section](https://www.boost.org/doc/user-guide/getting-started.html) on how
-to install the entire Boost project or only the dependencies of `boost::bloom::container`
+to install the entire Boost project or only the dependencies of `boost::container::hub`
 (`assert`, `config`, `core` and `throw_exception`).
 
 This is a header-only library, so no additional build phase is needed. C++11 or later required.
@@ -887,8 +906,31 @@ template<typename T>
 } // namespace boost
 ```
 
+* The library requires C++11 at a minimum. `std::uint64_t` must exist.
+* `from_range_t` and `from_range` are only available if the standard library provides
+  `<ranges>` and `<concepts>`. If this is the case, `boost::container::from_range_t`
+  is equal to  C++23 [`std::from_range_t`](https://en.cppreference.com/w/cpp/ranges/from_range.html)
+  if this is provided; otherwise, it is a different type with the same characteristics.
+* `boost::container::pmr::hub` is only available if the standard library provides
+  `<memory_resource>`.
+
+
 ### Class template `boost::container::hub`
-TBW
+
+`boost::container::hub` — A container with constant-time insertion and erasure and
+element stability. `boost::container::hub<T, Allocator>` is a model of
+[_SequenceContainer_](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
+[_ReversibleContainer_](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
+[_AllocatorAwareContainer_](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html).
+
+Elements are stored in _blocks_ of contiguous memory with a capacity of 64 elements each.
+Insertion position is determined by the container, and insertion may reuse the memory locations
+of previously erased elements. A block with at least one element is called _active_; a block
+without any element is called _reserved_. When an active block becomes empty after element
+erasure, the container keeps it internally as a reserved block for future reuse rather than deallocating it.
+Reserved blocks may only be deallocated with `shrink_to_fit` or `trim_capacity` (or on container destruction).
+Reserved blocks are not used until all active blocks are full. New blocks are only allocated when 
+all the blocks in the container are full or if the user issues a `reserve` operation.
 
 #### Synopsis
 
@@ -1045,11 +1087,6 @@ template<
 } // namespace boost
 ```
 
-* The library requires C++11 at a minimum. `std::uint64_t` must exist.
 * User-defined deduction guides are ony available if the compiler supports CTAD. 
 * range-related operations are only available if the standard library provides
-  `<ranges>` and `<concepts>`. If this is the case, `boost::container::from_range_t`
-  is equal to  C++23 [`std::from_range_t`](https://en.cppreference.com/w/cpp/ranges/from_range.html)
-  if this is provided; otherwise, it is a different type with the same characteristics.
-* `boost::container::pmr::hub` is only available if the standard library provides
-  `<memory_resource>`.
+  `<ranges>` and `<concepts>`.
