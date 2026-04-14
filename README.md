@@ -919,9 +919,9 @@ template<typename T>
 
 `boost::container::hub` — A container with constant-time insertion and erasure and
 element stability. `boost::container::hub<T, Allocator>` is a model of
-[_SequenceContainer_](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
-[_ReversibleContainer_](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
-[_AllocatorAwareContainer_](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html).
+[`SequenceContainer`](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
+[`ReversibleContainer`](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
+[`AllocatorAwareContainer`](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html).
 
 Elements are stored in _blocks_ of contiguous memory with a capacity of 64 elements each.
 Insertion position is determined by the container, and insertion may reuse the memory locations
@@ -971,8 +971,8 @@ public:
   template</* container-compatible-range<T> */ R>
     hub(from_range_t, R&& rg, const Allocator& = Allocator());
   hub(const hub& x);
-  hub(hub&&) noexcept;
   hub(const hub& x, const std::type_identity_t<Allocator>& alloc);
+  hub(hub&&) noexcept;
   hub(hub&&, const std::type_identity_t<Allocator>& alloc);
   hub(std::initializer_list<T> il, const Allocator& = Allocator());
   ~hub();
@@ -1090,3 +1090,91 @@ template<
 * User-defined deduction guides are ony available if the compiler supports CTAD. 
 * range-related operations are only available if the standard library provides
   `<ranges>` and `<concepts>`.
+
+#### Description
+##### Template parameters
+
+| Parameter | Description |
+|--|--|
+| `T` | The cv-unqualified object type of the elements inserted into the container. |
+| `Allocator` | An [`Allocator`](https://en.cppreference.com/w/cpp/named_req/Allocator) whose value type is `T`. |
+
+##### Exception Safety Guarantees
+
+Except when explicitly noted, all non-const member functions and associated functions taking
+`boost::container::hub` by non-const reference provide the
+[basic exception guarantee](https://en.cppreference.com/w/cpp/language/exceptions#Exception_safety),
+whereas all const member functions and associated functions taking
+`boost::container::hub` by const reference provide the
+[strong exception guarantee](https://en.cppreference.com/w/cpp/language/exceptions#Exception_safety).
+
+Except when explicitly noted, no operation throws an exception unless that exception
+is thrown by the container’s `Allocator` object (if any).
+
+#### Types and constants
+
+TBW
+
+#### Constructors, copy and assignment
+
+`hub() noexcept(noexcept(Allocator()));`
+
+_Preconditions:_ `allocator_type` must be [`DefaultConstructible`](https://en.cppreference.com/w/cpp/named_req/DefaultConstructible).</br>
+_Effects:_ Constructs an empty hub, using `allocator_type()` as the allocator.<br/>
+_Complexity:_ Constant.
+
+`explicit hub(const Allocator&) noexcept;`
+
+_Effects:_ Constructs an empty hub, using the specified allocator.<br/>
+_Complexity:_ Constant.
+
+`explicit hub(size_type n, const Allocator& = Allocator());`
+
+_Preconditions:_ `Tp` is [`DefaultInsertable`](https://en.cppreference.com/w/cpp/named_req/DefaultInsertable.html) into `hub`. <br/>
+_Effects:_ Constructs a `hub` with `n` default-inserted elements, using the specified allocator. </br/> 
+_Complexity:_ Linear in `n`.
+
+`hub(size_type n, const T& value, const Allocator& = Allocator());`
+
+_Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
+_Effects:_ Constructs a `hub` with `n` copies of `value`, using the specified allocator. <br/>
+_Complexity:_ Linear in `n`.
+
+`template<typename InputIterator>`<br/>
+`  hub(InputIterator first, InputIterator last, const Allocator& = Allocator());`
+
+_Effects:_ Constructs a `hub` equal to the range `[first, last)`, using the specified allocator. <br/>
+_Complexity:_ Linear in `std::distance(first, last)`.
+
+`template</* container-compatible-range<T> */ R>`<br/>
+`  hub(from_range_t, R&& rg, const Allocator& = Allocator());`
+
+_Effects:_ Constructs a `hub` object equal to the range `rg`, using the specified allocator. <br/>
+_Complexity:_ Linear in `std::ranges​::​distance(rg)`.
+
+`hub(const hub& x);`<br/>
+`hub(const hub& x, const std::type_identity_t<Allocator>& alloc);`
+
+_Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
+_Effects:_ Constructs a `hub` object equal to `x`. If the second overload is called, uses `alloc`.
+_Complexity:_ Linear in `x.size()`.
+
+`hub(hub&&) noexcept;`<br/>
+`hub(hub&&, const std::type_identity_t<Allocator>& alloc);`
+
+_Preconditions:_ For the second overload, when `std::allocator_traits<Allocator>​::​is_always_equal​::​value` is `false`, `T` meets the [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) requirements. <br/>
+_Effects:_ When the first overload is called, or the second overload is called and `alloc == x.get_allocator()` is true, element block is moved from `x` into `*this`.
+Pointers and references to the elements of `x` now refer to those same elements but as members of `*this`.
+Iterators referring to the elements of `x` will continue to refer to their elements, but they now behave as iterators into `*this`. <br/>
+If the second overload is called and `alloc == x.get_allocator()` is `false`, each element in `x` is moved into `*this`.
+References, pointers and iterators referring to the elements of `x` are invalidated. <br/>
+_Postconditions:_ `x.empty()` is `true`.
+The relative order of the elements of `*this` is the same as that of the elements of `x` prior to the call. <br/>
+_Complexity:_ If the second overload is called and `alloc == x.get_allocator()` is `false`, linear in `x.size()`.
+Otherwise constant.
+
+`hub(std::initializer_list<T> il, const Allocator& = Allocator());`
+
+_Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
+_Effects:_ Constructs a `hub` object equal to `ilp , using the specified allocator. <br/>
+_Complexity:_ Linear in `il.size()`.
