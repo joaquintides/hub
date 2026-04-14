@@ -1176,5 +1176,73 @@ Otherwise constant.
 `hub(std::initializer_list<T> il, const Allocator& = Allocator());`
 
 _Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
-_Effects:_ Constructs a `hub` object equal to `ilp , using the specified allocator. <br/>
+_Effects:_ Constructs a `hub` object equal to `il`, using the specified allocator. <br/>
 _Complexity:_ Linear in `il.size()`.
+
+`hub& operator=(const hub& x);`
+
+_Preconditions:_ `T`  is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`
+and [`CopyAssignable`](https://en.cppreference.com/w/cpp/named_req/CopyAssignable). <br/>
+_Effects:_ All elements in `*this` are either copy-assigned to, or destroyed.
+All elements in `x` are copied into `*this`, maintaining their relative order. <br/>
+_Complexity:_ Linear in `size() + x.size()`.
+
+`hub& operator=(hub&& x)`<br/>
+`  noexcept(std::allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||`<br/>
+`           std::allocator_traits<Allocator>::is_always_equal::value);`
+
+_Preconditions:_ When `(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+ allocator_traits<Allocator>::is_always_equal::value)`
+is `false`, `T` is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`
+and [`MoveAssignable`](https://en.cppreference.com/w/cpp/named_req/MoveAssignable). <br/>
+_Effects:_ Each element in `*this` is either move-assigned to, or destroyed.
+When `(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+ get_allocator() == x.get_allocator())`
+is `true`, each element block is moved from `x` into `*this`.
+Pointers and references to the elements of `x` now refer to those same elements but as members of `*this`.
+Iterators referring to the elements of `x` will continue to refer to their elements, but they now behave as iterators into `*this`, not into `x`. <br/>
+When `(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+ get_allocator() == x.get_allocator())`
+is `false`, each element in `x` is moved into `*this`.
+References, pointers and iterators referring to the elements of `x` are invalidated. <br/>
+_Postconditions:_ `x.empty()` is `true`.
+The relative order of the elements of `*this` is the same as that of the elements of `x` prior to this call. <br/>
+_Complexity:_ Linear in `size()`.
+If `(allocator_traits<Allocator>::propagate_on_container_move_assignment::value ||
+ get_allocator() == x.get_allocator())`
+is `false`, also linear in `x.size()`.
+
+#### Capacity
+
+`size_type capacity() const noexcept;`
+
+_Returns:_ The total number of elements that `*this` can hold without requiring allocation of more element blocks. <br/>
+_Complexity:_ Constant.
+
+`void reserve(size_type n);`
+
+_Effects:_ If `n <= capacity()` is `true`, there are no effects.
+Otherwise increases `capacity()` by allocating reserved blocks. <br/>
+_Postconditions:_ `capacity() >= n` is `true`. <br/>
+_Throws:_ `std::length_error` if `n > max_size()`, as well as any exceptions thrown by the allocator. <br/>
+_Complexity:_ Linear in the number of reserved blocks allocated. <br/>
+_Remarks:_ All references, pointers, and iterators referring to elements in `*this`, as well as the past-the-end iterator, remain valid.
+
+`void shrink_to_fit();`
+
+_Preconditions:_ `T` is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`. <br/>
+_Effects:_ Reallocates elements if needed so that the number of active blocks is minimized and deallocates all ensuing reserved blocks.
+If `capacity()` is already equal to `size()`, there are no effects. If an exception is thrown by `T` during reallocation, the effects are unspecified. <br/>
+_Complexity:_ If reallocation happens, linear in the size of the sequence. Also, linear in the number of reserved blocks. <br/>
+_Remarks:_ If reallocation happens, the order of the elements in `*this` may change and all references, pointers, and iterators referring
+to the elements in `*this` are invalidated.
+
+`void trim_capacity() noexcept;`<br/>
+`void trim_capacity(size_type n) noexcept;`
+
+_Effects:_ For the first overload, all reserved blocks are deallocated, and `capacity()` is reduced accordingly.
+For the second overload, if `n >= capacity()` is `true`, there are no effects; otherwise, `capacity()` is reduced to no less than `n`. <br/>
+_Complexity:_ Linear in the number of reserved blocks deallocated. <br/>
+_Remarks:_ All references, pointers, and iterators referring to elements in `*this`, as well as the past-the-end iterator, remain valid.
+
+
