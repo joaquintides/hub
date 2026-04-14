@@ -23,6 +23,7 @@ the current reference implementation of this standard container.
 * [Reference](#reference)
   * [`<boost/container/hub.hpp>`](#boostcontainerhubhpp)
   * [Class template `boost::container::hub`](#class-template-boostcontainerhub)
+    * [Synopsis](#synopsis)
 
 ## Introduction
 
@@ -102,7 +103,7 @@ block can be effectively accomplished in constant time with
 (resp. `std::countr_one(mask)`). It is not hard to see that insertion, erasure and
 iterator increment can also be implemented in (non-amortized) constant time.
 
-## Deviations from `std::hive`
+### Deviations from `std::hive`
 
 `boost::container::hub` does not conform to the specification of `std::hive` in
 a few aspects:
@@ -887,6 +888,9 @@ template<typename T>
 ```
 
 ### Class template `boost::container::hub`
+TBW
+
+#### Synopsis
 
 ```cpp
 // #include <boost/container/hub.hpp>
