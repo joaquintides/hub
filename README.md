@@ -137,6 +137,7 @@ i.e. those without any used slot).
 Making them so would require extra block metadata and bookkeeping, and this overhead
 was not deemed worth imposing over the potential usefulness of having ordered
 iterators.
+* No operations are marked `constexpr`.
 
 The following functionality is specific to `boost::container::hub`:
 
@@ -1242,7 +1243,122 @@ to the elements in `*this` are invalidated.
 
 _Effects:_ For the first overload, all reserved blocks are deallocated, and `capacity()` is reduced accordingly.
 For the second overload, if `n >= capacity()` is `true`, there are no effects; otherwise, `capacity()` is reduced to no less than `n`. <br/>
-_Complexity:_ Linear in the number of reserved blocks deallocated. <br/>
+_Complexity:_ Linear in the number of non-full blocks. <br/>
 _Remarks:_ All references, pointers, and iterators referring to elements in `*this`, as well as the past-the-end iterator, remain valid.
 
+#### Modifiers
+
+`template<typename... Args>`<br/>
+`  iterator emplace(Args&&... args);`<br/>
+`template<typename... Args>`<br/>
+`  iterator emplace_hint(const_iterator hint, Args&&... args);`
+
+_Preconditions:_ T is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `args`. <br/>
+_Effects:_ Inserts an object of type `T` constructed with `std​::​forward<Args>(args)...`.
+The `hint` parameter is ignored.
+If an exception is thrown, there are no effects.<br/>
+(Note: `args` can directly or indirectly refer to a value in `*this`.) <br/>
+_Returns:_ An iterator that points to the new element. <br/>
+_Complexity:_ Constant. Exactly one object of type `T` is constructed. <br/>
+
+`iterator insert(const T& x);`<br/>
+`iterator insert(T&& x);`<br/>
+`iterator insert(const_iterator hint, const T& x);`<br/>
+`iterator insert(const_iterator hint, T&& x);`<br/>
+
+_Effects:_ Equivalent to: `return emplace(std​::​forward<decltype(x)>(x));`
+
+`void insert(std::initializer_list<T> il);`
+
+_Effects:_ Equivalent to: `insert(il.begin(), il.end());`
+
+`template</* container-compatible-range<T> */ R>`<br/>
+`  void insert_range(R&& rg);`
+
+_Preconditions:_ `T` is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `*ranges​::​begin(rg)`.
+`rg` and `*this` do not overlap. <br/>
+_Effects:_ Inserts copies of elements in `rg`.
+Each iterator in the range `rg` is dereferenced exactly once. <br/>
+_Complexity:_ Linear in the number of elements inserted.
+Exactly one object of type `T` is constructed for each element inserted.
+
+`template<typename InputIterator>`<br/>
+`  void insert(InputIterator first, InputIterator last);`
+
+_Preconditions:_ `T` is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `*first`.
+[`first`, `last`) and `*this` do not overlap. <br/>
+_Effects:_ Inserts copies of elements in [`first`, `last`).
+Each iterator in the range [`first`, `last`) is dereferenced exactly once. <br/>
+_Complexity:_ Linear in the number of elements inserted.
+Exactly one object of type `T` is constructed for each element inserted.
+
+`void insert(size_type n, const T& x);`
+
+_Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
+_Effects:_ Inserts `n` copies of `x`. <br/>
+_Complexity:_ Linear in `n`.
+Exactly one object of type `T` is constructed for each element inserted.
+
+`iterator erase(const_iterator position);`<br/>
+`iterator erase(const_iterator first, const_iterator last);`
+
+_Complexity:_ Linear in the number of elements erased. <br/>
+_Remarks:_ Invalidates references, pointers and iterators referring to the erased elements.
+
+`void erase_void(const_iterator position);`
+
+_Effects:_ Equivalent to: `erase(position);` <br/>
+(Note: Potentially faster than `erase(position)` since no return iterator needs to be computed.)
+
+`void swap(hub&)`<br/>
+`  noexcept(std::allocator_traits<Allocator>::propagate_on_container_swap::value ||`
+`           std::allocator_traits<Allocator>::is_always_equal::value);`
+
+_Effects:_ Exchanges the contents and `capacity()` of `*this` with those of `x`. <br/>
+_Complexity:_ Constant.
+
+#### `std::hive` operations
+
+`void splice(hub& x);`<br/>
+`void splice(hub&& x);`
+
+_Preconditions:_ `get_allocator() == x.get_allocator()` is `true`. <br/>
+_Effects:_ If `std::addressof(x) == this` is `true`, the behavior is erroneous and there are no effects.
+Otherwise, inserts the contents of `x` into `*this` and `x` becomes empty.
+Pointers and references to the moved elements of `x` now refer to those same elements but as members of `*this`.
+Iterators referring to the moved elements continue to refer to their elements, but they now behave as iterators into `*this`, not into `x`. <br/>
+_Complexity:_ Linear in the sum of all element blocks in `x` plus all element blocks in `*this`. <br/>
+_Remarks:_ Reserved blocks in `x` are not transferred into `*this`.
+
+`template<typename BinaryPredicate = std::equal_to<T>>`<br/>
+`  size_type unique(BinaryPredicate pred = BinaryPredicate());`
+
+_Preconditions:_ `pred` is an equivalence relation. <br/>
+_Effects:_ Erases all but the first element from every consecutive group of equivalent elements.
+That is, for a nonempty `hub`, erases all elements referred to by the iterator `i` in the range [`begin() + 1`, `end()`) 
+for which `pred(*i, *(i - 1))` is `true`. <br/>
+_Returns:_ The number of elements erased. <br/>
+_Throws:_ Nothing unless an exception is thrown by the predicate. <br/>
+_Complexity:_ If `empty()` is `false`, exactly `size() - 1` applications of the corresponding predicate, otherwise no applications of the predicate. <br/>
+_Remarks:_ Invalidates references, pointers, and iterators referring to the erased elements.
+
+`template<typename Compare = std::less<T>>`<br/>
+`  void sort(Compare comp = Compare());`
+
+_Preconditions:_ `T` is is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`,
+[`MoveAssignable`](https://en.cppreference.com/w/cpp/named_req/MoveAssignable), 
+and [`Swappable`](https://en.cppreference.com/w/cpp/named_req/Swappable). <br/>
+_Effects:_ Sorts `*this` according to the `comp` function object.
+If an exception is thrown, the order of the elements in `*this` is unspecified. <br/>
+_Complexity:_ O(<i>N</i>·log<i>N</i>) comparisons, where _N_ is `size()`. <br/>
+_Remarks:_ May allocate.
+References, pointers, and iterators referring to elements in `*this` may be invalidated. <br/>
+(Note: The sorting algorithm used is not stable.)
+
+`iterator get_iterator(const_pointer p) noexcept;`<br/>
+`const_iterator get_iterator(const_pointer p) const noexcept;`
+
+_Preconditions:_ `p` points to an element in `*this`. <br/>
+_Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`. <br/>
+_Complexity:_ Linear in the number of active blocks in _*this_.
 
