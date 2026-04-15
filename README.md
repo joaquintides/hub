@@ -34,7 +34,7 @@ the current reference implementation of this standard container.
     * [Synopsis](#synopsis)
     * [Description](#description)
     * [Constructors, copy and assignment](#constructors-copy-and-assignment)
-    * [Capacity](#capacity)
+    * [Capacity](#ref-capacity)
     * [Modifiers](#modifiers)
     * [`std::hive` operations](#ref-stdhive-operations)
     * [Internal visitation](#ref-internal-visitation)
@@ -216,7 +216,7 @@ h.visit_all([](auto& x) { x *= 2; });
 Although functionally equivalent to the classical loop, `visit_all` is generally
 faster as it is implemented with a combination of loop unrolling and prefetching
 techniques. Speedups can be as high as 1.75x. Consult the [performance](#performance)
-section for a comparison in execution speeds. Consult the
+section for a comparison of execution speeds. Consult the
 [reference](#ref-internal-visitation) for documentation on variations of
 `visit_all` (`visit`, `visit_while`, `visit_all_while`).
 
@@ -1388,6 +1388,7 @@ If `(allocator_traits<Allocator>::propagate_on_container_move_assignment::value 
  get_allocator() == x.get_allocator())`
 is `false`, also linear in `x.size()`.
 
+<a name="ref-capacity"></a>
 #### Capacity
 
 `size_type capacity() const noexcept;`
