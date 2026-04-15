@@ -1321,7 +1321,7 @@ _Effects:_ Equivalent to: `erase(position);` <br/>
 (Note: Potentially faster than `erase(position)` since no return iterator needs to be computed.)
 
 `void swap(hub&)`<br/>
-`  noexcept(std::allocator_traits<Allocator>::propagate_on_container_swap::value ||`
+`  noexcept(std::allocator_traits<Allocator>::propagate_on_container_swap::value ||`<br/>
 `           std::allocator_traits<Allocator>::is_always_equal::value);`
 
 _Effects:_ Exchanges the contents and `capacity()` of `*this` with those of `x`. <br/>
