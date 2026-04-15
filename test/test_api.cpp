@@ -371,7 +371,7 @@ void test(const typename Hub::allocator_type& al = {})
 
     auto c = cx.capacity();
     x.reserve(c + 1000);
-    x.trim_capacity(c + 500);
+    x.trim_capacity(c + 500); 
     BOOST_TEST_LT(cx.capacity(), c + 1000);
     BOOST_TEST_GE(cx.capacity(), c + 500);
     x.trim_capacity();
