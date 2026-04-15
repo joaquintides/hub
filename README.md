@@ -88,6 +88,16 @@ The library has been verified to work with GCC 4.8, Clang 3.5 and Visual Studio 
 (and later versions of those). You can check that your environment is correctly set up by
 compiling the example program shown above.
 
+## Tutorial
+
+### Debugging
+#### Visual Studio Natvis
+
+Add the [`boost_hub.natvis`](extra/boost_hub.natvis) visualizer to your project to allow
+for user-friendly inspection of `boost::container::hub`s.
+
+![Natvis window](doc/img/natvis.png)
+
 ## Comparison with `std::hive`
 ### Motivation for a novel data structure
 
