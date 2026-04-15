@@ -98,6 +98,31 @@ for user-friendly inspection of `boost::container::hub`s.
 
 ![Natvis window](doc/img/natvis.png)
 
+#### GDB Pretty-Printer
+
+`boost::container::hub` comes with a dedicated 
+[pretty-printer](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Pretty-Printing.html#Pretty-Printing)
+for visual inspection when debugging with GDB:
+
+```
+(gdb) print h
+$1 = boost::container::hub with {size = 7, capacity = 1024} = {0, 23, 1, 100, 10, 2, 42}
+(gdb) print h[3]
+$2 = 100
+```
+
+Remember to enable pretty-printing in GDB (typically a one-time setup):
+
+```
+(gdb) set print pretty on
+```
+
+And load the [`boost_hub_printers.py`](extra/boost_hub_printers.py) script before variable inspection:
+
+```
+(gdb) source <path-to-hub-repo>/extra/boost_hub_printers.py
+```
+
 ## Comparison with `std::hive`
 ### Motivation for a novel data structure
 
