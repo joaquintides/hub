@@ -217,7 +217,7 @@ Although functionally equivalent to the classical loop, `visit_all` is generally
 faster as it is implemented with a combination of loop unrolling and prefetching
 techniques. Speedups can be as high as 1.75x. Consult the [performance](#performance)
 section for a comparison in execution speeds. Consult the
-[reference](#internal-visitation) for documentation on variations of
+[reference](#ref-internal-visitation) for documentation on variations of
 `visit_all` (`visit`, `visit_while`, `visit_all_while`).
 
 ### Debugging
