@@ -12,6 +12,12 @@ the current reference implementation of this standard container.
 * [Comparison with `std::hive`](#comparison-with-stdhive)
   * [Motivation for a novel data structure](#motivation-for-a-novel-data-structure)
   * [Deviations from `std::hive`](#deviations-from-stdhive)
+* [Tutorial](#tutorial)
+  * [Unordered insertion](#unordered-insertion)
+  * [Capacity](#capacity)
+  * [Debugging](#debugging)
+    * [Visual Studio Natvis](#visual-studio-natvis)
+    * [GDB Pretty-Printer](#gdb-pretty-printer)
 * [Performance](#performance)
   * [GCC 15, x64](#gcc-15-x64)
   * [Clang 20, x64](#clang-20-x64)
@@ -145,7 +151,7 @@ because the `hub` contains 500 elements.
 
 After erasures, a `hub` may contain "holes" or available positions in
 non-empty blocks that can't be trimmed further. `shrink_to_fit` reallocates
-elements so that they occuppy the minimum possible number of blocks, and
+elements so that they occupy the minimum possible number of blocks, and
 then deallocates the remaining blocks:
 
 ```cpp
