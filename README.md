@@ -79,8 +79,8 @@ particle simulation and HFT come to mind.
 
 ## Getting started
 
-Consult the website [section](https://www.boost.org/doc/user-guide/getting-started.html) on how
-to install the entire Boost project or only the dependencies of `boost::container::hub`
+`boost::container::hub` depends on Boost. Consult the website [section](https://www.boost.org/doc/user-guide/getting-started.html) on how
+to install the entire Boost project or only the exact dependencies of `boost::container::hub`
 (`assert`, `config`, `core` and `throw_exception`).
 
 This is a header-only library, so no additional build phase is needed. C++11 or later required.
