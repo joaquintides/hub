@@ -103,7 +103,23 @@ insertions and keep the number of memory allocations to the minimum possible.
 
 ### Unordered insertion
 
+As a result of its memory reuse policy, users generally can't control the resulting
+insertion order in a `hub`:
 
+```cpp
+boost::container::hub<int> h = {0, 1, 2};
+h.erase(h.begin());
+h.insert({3, 4, 5});
+for(const auto& x: h) std::cout << x << " ";
+```
+Output
+```
+3 1 2 4 5
+```
+
+In the example, `h.erase(h.begin())` generates an available position where
+`0` used to be, and this is where `3` goes in when inserting `{3, 4, 5}`,
+rather than after `2`.
 
 ### Debugging
 #### Visual Studio Natvis
