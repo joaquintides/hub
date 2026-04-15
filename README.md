@@ -121,6 +121,45 @@ In the example, `h.erase(h.begin())` generates an available position where
 `0` used to be, and this is where `3` goes in when inserting `{3, 4, 5}`,
 rather than after `2`.
 
+### Capacity
+
+`reserve` can be used to preallocate memory blocks before insertion:
+
+```cpp
+boost::container::hub<int> h;
+h.reserve(1000); // capacity() == 1024 (rounded up to 64)
+for(int i = 0; i < 500; ++i) h.insert(i); // won't allocate (500 <= 1024)
+```
+
+In the example, `h` ends up with ⌈500/64⌉ = 8 non-empty blocks and
+1024/64 - 8 = 8 empty blocks (also called _reserved_ blocks). Empty blocks
+can be deallocated as follows:
+
+```cpp
+h.trim_capacity(750); // capacity() == 768
+h.trim_capacity();    // ~trim_capacity(0), capacity() == 512
+```
+
+Obviously, `h.trim_capacity()` doesn't bring the capacity down to zero
+because the `hub` contains 500 elements.
+
+After erasures, a `hub` may contain "holes" or available positions in
+non-empty blocks that can't be trimmed further. `shrink_to_fit` reallocates
+elements so that they occuppy the minimum possible number of blocks, and
+then deallocates the remaining blocks:
+
+```cpp
+erase_if(h, [](int x) { return x % 2 != 0; }); // erase odd values, size() == 250
+h.shrink_to_fit(); // capacity() == ceil(250/64) * 64 = 256
+for(const auto& x: h) std::cout << x << " ";
+```
+Output:
+```
+0 126 2 124 4 122 6 120 8 118 10...
+```
+Note how `shrink_to_fit` has reallocated the elements `126`, `124`, etc. so that
+they go in the available positions previously occupied by odd values.
+
 ### Debugging
 #### Visual Studio Natvis
 
