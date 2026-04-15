@@ -97,7 +97,7 @@ compiling the example program shown above.
 ## Tutorial
 
 If you're familiar with STL sequence containers (`std::list`,  `std::vector`),
-getting used `boost::container::hub` is entirely straightforward as its API is
+getting used to `boost::container::hub` is entirely straightforward as its API is
 mostly ananalogus. The key characteristics that set this container apart are:
 
 * Pointers and iterators to an element remain valid as long as the element is not
