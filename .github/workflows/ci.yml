@@ -6,7 +6,7 @@ on:
       - meta/**
       - README.md
 
-jobs:
+jobs: 
   call-boost-ci:
     with:
       branch_coverage: false
