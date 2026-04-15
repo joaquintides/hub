@@ -1065,8 +1065,9 @@ public:
     /* Linear on # available blocks, std::hive is linear on # _reserved_
      * blocks.
      */
+    if(capacity() <= n) return;
     for(auto pbb = blist.header()->next_available;
-        capacity() > n && pbb != blist.header(); ) {
+        capacity() - n >= N && pbb != blist.header(); ) {
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
