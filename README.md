@@ -166,6 +166,36 @@ Output:
 Note how `shrink_to_fit` has reallocated the elements `126`, `124`, etc. so that
 they go in the available positions previously occupied by odd values.
 
+### `std::hive` operations
+
+`boost::container::hub` provides operations specific to C++26 `std::hive`:
+
+```cpp
+boost::container::hub<int> h1 = {0, 2, 3, 4, 6},
+                           h2 = {1, 4, 6, 7, 9};
+h1.splice(h2); // transfer non-empty blocks from h2 to h1 (no rellocation)
+h1.sort();     // sorts the values (reallocates)
+h1.unique();   // erase repeated, consecutive values
+```
+
+A slightly more interesting operation is `get_iterator`:
+
+```cpp
+boost::container::hub<int> h;
+//...
+int* p = std::addressof(*h.insert(50));
+//...
+boost::container::hub<int>::iterator it = h.get_iterator(p);
+h.erase(it); // erase the element (couldn't be done drectly with p)
+```
+
+`get_iterator` returns an iterator after a pointer to a valid element of the
+`hub`. This can be useful in legacy scenarios where elements of the container
+are externally tracked via pointers, or for encapsulation purposes, or
+to save memory (`hub` iterators typically are 16 bytes in size). Note, however,
+that `get_iterator` is not cheap: execution is linear on the number of
+non-empty blocks.
+
 ### Debugging
 #### Visual Studio Natvis
 
