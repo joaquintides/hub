@@ -24,6 +24,13 @@ the current reference implementation of this standard container.
   * [`<boost/container/hub.hpp>`](#boostcontainerhubhpp)
   * [Class template `boost::container::hub`](#class-template-boostcontainerhub)
     * [Synopsis](#synopsis)
+    * [Description](#description)
+    * [Constructors, copy and assignment](#constructors-copy-and-assignment)
+    * [Capacity](#capacity)
+    * [Modifiers](#modifiers)
+    * [`std::hive` operations](#stdhive-operations)
+    * [Internal visitation](#internal-visitation)
+    * [Erasure](#erasure)
 
 ## Introduction
 
@@ -63,7 +70,7 @@ as possible.
 
 `boost::container::hub` is very similar but not entirely equivalent to C++26
 [`std::hive`](https://eel.is/c++draft/sequences#hive) (hence the different naming).
-Consult the section ["Comparison with `std::hive`"](#comparison-with-stdhive) section for details.
+Consult the section ["Comparison with `std::hive`"](#comparison-with-stdhive) for details.
 
 The primary use case for `boost::container::hub`, `std::hive` and similar containers such
 as _slot maps_ is in high-performance scenarios where elements are created and destroyed frequently,
@@ -922,9 +929,16 @@ template<typename T>
 element stability. `boost::container::hub<T, Allocator>` is a model of
 [`SequenceContainer`](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
 [`ReversibleContainer`](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
-[`AllocatorAwareContainer`](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html).
+[`AllocatorAwareContainer`](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html),
+with the following exceptions:
 
-Elements are stored in _blocks_ of contiguous memory with a capacity of 64 elements each.
+* Operators `==` and `!=` are not provided.
+* Positional insertion operations are not provided: `emplace(position, args...)`, `insert(position, first, last)`, etc. 
+
+The iterators of `hub` are models of
+[`LegacyBidirectionalIterator`](https://en.cppreference.com/w/cpp/named_req/BidirectionalIterator).
+
+Elements of a `hub` are stored in _blocks_ of contiguous memory with a capacity of 64 elements each.
 Insertion position is determined by the container, and insertion may reuse the memory locations
 of previously erased elements. A block with at least one element is called _active_; a block
 without any element is called _reserved_. When an active block becomes empty after element
@@ -1112,27 +1126,23 @@ whereas all const member functions and associated functions taking
 Except when explicitly noted, no operation throws an exception unless that exception
 is thrown by the container’s `Allocator` object (if any).
 
-#### Types and constants
-
-TBW
-
 #### Constructors, copy and assignment
 
 `hub() noexcept(noexcept(Allocator()));`
 
-_Preconditions:_ `allocator_type` must be [`DefaultConstructible`](https://en.cppreference.com/w/cpp/named_req/DefaultConstructible).</br>
-_Effects:_ Constructs an empty hub, using `allocator_type()` as the allocator.<br/>
+_Preconditions:_ `Allocator` must be [`DefaultConstructible`](https://en.cppreference.com/w/cpp/named_req/DefaultConstructible).<br/>
+_Effects:_ Constructs an empty `hub`, using `Allocator()` as the allocator.<br/>
 _Complexity:_ Constant.
 
 `explicit hub(const Allocator&) noexcept;`
 
-_Effects:_ Constructs an empty hub, using the specified allocator.<br/>
+_Effects:_ Constructs an empty `hub`, using the specified allocator.<br/>
 _Complexity:_ Constant.
 
 `explicit hub(size_type n, const Allocator& = Allocator());`
 
 _Preconditions:_ `Tp` is [`DefaultInsertable`](https://en.cppreference.com/w/cpp/named_req/DefaultInsertable.html) into `hub`. <br/>
-_Effects:_ Constructs a `hub` with `n` default-inserted elements, using the specified allocator. </br/> 
+_Effects:_ Constructs a `hub` with `n` default-inserted elements, using the specified allocator. <br/> 
 _Complexity:_ Linear in `n`.
 
 `hub(size_type n, const T& value, const Allocator& = Allocator());`
@@ -1427,4 +1437,5 @@ for (auto i = c.begin(); i != c.end(); ) {
 }
 return original_size - c.size();
 ```
+(Note: Potentially faster than the sample code due to internal optimizations.)
 
