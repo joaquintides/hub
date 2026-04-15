@@ -90,6 +90,21 @@ compiling the example program shown above.
 
 ## Tutorial
 
+If you're familiar with STL sequence containers (`std::list`,  `std::vector`),
+getting used `boost::container::hub` is entirely straightforward as its API is
+mostly ananalogus. The key characteristics that set this container apart are:
+
+* Pointers and iterators to an element remain valid as long as the element is not
+erased. `hub` will _not_ reallocate elements as it grows in size.
+* Insertion and erasure are constant-time and very fast. Memory is allocated in
+blocks with capacity for 64 elements each, and the container keeps track of
+available positions, including those of erased elements, to use them for further
+insertions and keep the number of memory allocations to the minimum possible.
+
+### Unordered insertion
+
+
+
 ### Debugging
 #### Visual Studio Natvis
 
