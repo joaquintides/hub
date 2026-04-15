@@ -1492,7 +1492,7 @@ _Effects:_ Equivalent to: `erase(position);` <br/>
 _Effects:_ Exchanges the contents and `capacity()` of `*this` with those of `x`. <br/>
 _Complexity:_ Constant.
 
-<a name="ref-stdhive-operations">
+<a name="ref-stdhive-operations"></a>
 #### `std::hive` operations
 
 `void splice(hub& x);`<br/>
@@ -1538,7 +1538,7 @@ _Preconditions:_ `p` points to an element in `*this`. <br/>
 _Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`. <br/>
 _Complexity:_ Linear in the number of active blocks in _*this_.
 
-<a name="ref-internal-visitation">
+<a name="ref-internal-visitation"></a>
 ####   Internal visitation
 
 `template<typename F>`<br/>
