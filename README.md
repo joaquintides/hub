@@ -12,6 +12,8 @@ the current reference implementation of this standard container.
 * [Tutorial](#tutorial)
   * [Unordered insertion](#unordered-insertion)
   * [Capacity](#capacity)
+  * [`std::hive` operations](#stdhive-operations)
+  * [Internal visitation](#internal-visitation)
   * [Debugging](#debugging)
     * [Visual Studio Natvis](#visual-studio-natvis)
     * [GDB Pretty-Printer](#gdb-pretty-printer)
@@ -195,6 +197,28 @@ are externally tracked via pointers, or for encapsulation purposes, or
 to save memory (`hub` iterators typically are 16 bytes in size). Note, however,
 that `get_iterator` is not cheap: execution is linear on the number of
 non-empty blocks.
+
+### Internal visitation
+
+The following, typical processing loop:
+
+```cpp
+boost::container::hub<int> h;
+//...
+for(auto& x: h) x *= 2;
+```
+
+Can also be written as:
+```cpp
+h.visit_all([](auto& x) { x *= 2; });
+```
+
+Although functionally equivalent to the classical loop, `visit_all` is generally
+faster as it is implemented with a combination of loop unrolling and prefetching
+techniques. Speedups can be as high as 1.75x. Consult the [performance](#performance)
+section for a comparison in execution speeds. Consult the
+[reference](#internal-visitation) for documentation on variations of
+`visit_all` (`visit`, `visit_while`, `visit_all_while`).
 
 ### Debugging
 #### Visual Studio Natvis
