@@ -583,7 +583,7 @@ struct sort_iterator
 
   reference operator[](difference_type n) const noexcept
   {
-    return operator*(*this + n);
+    return *(*this + n);
   }
 
   friend bool 
