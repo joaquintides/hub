@@ -1090,7 +1090,7 @@ template<typename T>
 
 ### Class template `boost::container::hub`
 
-`boost::container::hub` — A container with constant-time insertion and erasure and
+`boost::container::hub` — A container with constant-time insertion and erasure and
 element stability. `boost::container::hub<T, Allocator>` is a model of
 [`SequenceContainer`](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
 [`ReversibleContainer`](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
@@ -1289,7 +1289,7 @@ whereas all const member functions and associated functions taking
 [strong exception guarantee](https://en.cppreference.com/w/cpp/language/exceptions#Exception_safety).
 
 Except when explicitly noted, no operation throws an exception unless that exception
-is thrown by the container’s `Allocator` object (if any).
+is thrown by the container's `Allocator` object (if any).
 
 #### Constructors, copy and assignment
 
@@ -1326,7 +1326,7 @@ _Complexity:_ Linear in `std::distance(first, last)`.
 `  hub(from_range_t, R&& rg, const Allocator& = Allocator());`
 
 _Effects:_ Constructs a `hub` object equal to the range `rg`, using the specified allocator. <br/>
-_Complexity:_ Linear in `std::ranges​::​distance(rg)`.
+_Complexity:_ Linear in `std::ranges::distance(rg)`.
 
 `hub(const hub& x);`<br/>
 `hub(const hub& x, const std::type_identity_t<Allocator>& alloc);`
@@ -1338,7 +1338,7 @@ _Complexity:_ Linear in `x.size()`.
 `hub(hub&&) noexcept;`<br/>
 `hub(hub&&, const std::type_identity_t<Allocator>& alloc);`
 
-_Preconditions:_ For the second overload, when `std::allocator_traits<Allocator>​::​is_always_equal​::​value` is `false`, `T` meets the [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) requirements. <br/>
+_Preconditions:_ For the second overload, when `std::allocator_traits<Allocator>::is_always_equal::value` is `false`, `T` meets the [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) requirements. <br/>
 _Effects:_ When the first overload is called, or the second overload is called and `alloc == x.get_allocator()` is true, element block is moved from `x` into `*this`.
 Pointers and references to the elements of `x` now refer to those same elements but as members of `*this`.
 Iterators referring to the elements of `x` will continue to refer to their elements, but they now behave as iterators into `*this`. <br/>
@@ -1430,10 +1430,10 @@ _Remarks:_ All references, pointers, and iterators referring to elements in `*th
 `  iterator emplace_hint(const_iterator hint, Args&&... args);`
 
 _Preconditions:_ T is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `args`. <br/>
-_Effects:_ Inserts an object of type `T` constructed with `std​::​forward<Args>(args)...`.
+_Effects:_ Inserts an object of type `T` constructed with `std::forward<Args>(args)...`.
 The `hint` parameter is ignored.
 If an exception is thrown, there are no effects.<br/>
-(Note: `args` can directly or indirectly refer to a value in `*this`.) <br/>
+(Note: `args` can directly or indirectly refer to a value in `*this`.) <br/>
 _Returns:_ An iterator that points to the new element. <br/>
 _Complexity:_ Constant. Exactly one object of type `T` is constructed. <br/>
 
@@ -1442,7 +1442,7 @@ _Complexity:_ Constant. Exactly one object of type `T` is constructed. <br/>
 `iterator insert(const_iterator hint, const T& x);`<br/>
 `iterator insert(const_iterator hint, T&& x);`<br/>
 
-_Effects:_ Equivalent to: `return emplace(std​::​forward<decltype(x)>(x));`
+_Effects:_ Equivalent to: `return emplace(std::forward<decltype(x)>(x));`
 
 `void insert(std::initializer_list<T> il);`
 
@@ -1451,7 +1451,7 @@ _Effects:_ Equivalent to: `insert(il.begin(), il.end());`
 `template</* container-compatible-range<T> */ R>`<br/>
 `  void insert_range(R&& rg);`
 
-_Preconditions:_ `T` is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `*ranges​::​begin(rg)`.
+_Preconditions:_ `T` is [`EmplaceConstructible`](https://en.cppreference.com/w/cpp/named_req/EmplaceConstructible) into `hub` from `*ranges::begin(rg)`.
 `rg` and `*this` do not overlap. <br/>
 _Effects:_ Inserts copies of elements in `rg`.
 Each iterator in the range `rg` is dereferenced exactly once. <br/>
@@ -1484,7 +1484,7 @@ _Remarks:_ Invalidates references, pointers and iterators referring to the erase
 `void erase_void(const_iterator position);`
 
 _Effects:_ Equivalent to: `erase(position);` <br/>
-(Note: Potentially faster than `erase(position)` since no return iterator needs to be computed.)
+(Note: Potentially faster than `erase(position)` since no return iterator needs to be computed.)
 
 `void swap(hub&)`<br/>
 `  noexcept(std::allocator_traits<Allocator>::propagate_on_container_swap::value ||`<br/>
@@ -1530,7 +1530,7 @@ If an exception is thrown, the order of the elements in `*this` is unspecified. 
 _Complexity:_ O(<i>N</i>·log<i>N</i>) comparisons, where _N_ is `size()`. <br/>
 _Remarks:_ May allocate.
 References, pointers, and iterators referring to elements in `*this` may be invalidated. <br/>
-(Note: The sorting algorithm used is not stable.)
+(Note: The sorting algorithm used is not stable.)
 
 `iterator get_iterator(const_pointer p) noexcept;`<br/>
 `const_iterator get_iterator(const_pointer p) const noexcept;`
