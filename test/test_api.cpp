@@ -14,13 +14,14 @@
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
-// GCC on Darwin cannot parse the system <mach/message.h> header
-// xnu_static_assert_struct_size uses Clang-only extensions).
+/* GCC on Darwin cannot parse the system <mach/message.h> header
+ * (xnu_static_assert_struct_size uses Clang-only extensions).
+ */
 #if defined(__GNUC__) && !defined(__clang__) && defined(__APPLE__)
-#define BOOST_HUB_TEST_API_NO_INTERPROCESS
+#define BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS
 #endif
 
-#if !defined(BOOST_HUB_TEST_API_NO_INTERPROCESS)
+#if !defined(BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS)
 #include <boost/interprocess/allocators/allocator.hpp>
 #include <boost/interprocess/managed_shared_memory.hpp>
 #endif
@@ -712,8 +713,7 @@ int main()
   test<boost::container::hub<int>>();
   test<boost::container::hub<std::size_t>>();
 
-#ifndef BOOST_HUB_TEST_API_NO_INTERPROCESS
-    
+#if !defined(BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS)
   namespace bip = boost::interprocess;
   using segment_manager = bip::managed_shared_memory::segment_manager;
   using shared_int_allocator = bip::allocator<int, segment_manager>;
@@ -731,7 +731,6 @@ int main()
     bip::create_only, segment_name, 64 * 1024);
 
   test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
-
 #endif
 
 #if !defined(BOOST_NO_CXX17_HDR_MEMORY_RESOURCE)
