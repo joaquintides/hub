@@ -100,7 +100,7 @@ compiling the example program shown above.
 
 If you're familiar with STL sequence containers (`std::list`,  `std::vector`),
 getting used to `boost::container::hub` is entirely straightforward as its API is
-mostly ananalogus. The key characteristics that set this container apart are:
+mostly analogous. The key characteristics that set this container apart are:
 
 * Pointers and iterators to an element remain valid as long as the element is not
 erased. `hub` will _not_ reallocate elements as it grows in size.
@@ -175,7 +175,7 @@ they go in the available positions previously occupied by odd values.
 ```cpp
 boost::container::hub<int> h1 = {0, 2, 3, 4, 6},
                            h2 = {1, 4, 6, 7, 9};
-h1.splice(h2); // transfer non-empty blocks from h2 to h1 (no rellocation)
+h1.splice(h2); // transfer non-empty blocks from h2 to h1 (no reallocation)
 h1.sort();     // sorts the values (reallocates)
 h1.unique();   // erase repeated, consecutive values
 ```
@@ -188,7 +188,7 @@ boost::container::hub<int> h;
 int* p = std::addressof(*h.insert(50));
 //...
 boost::container::hub<int>::iterator it = h.get_iterator(p);
-h.erase(it); // erase the element (couldn't be done drectly with p)
+h.erase(it); // erase the element (couldn't be done directly with p)
 ```
 
 `get_iterator` returns an iterator after a pointer to a valid element of the
@@ -1267,7 +1267,7 @@ template<
 } // namespace boost
 ```
 
-* User-defined deduction guides are ony available if the compiler supports CTAD. 
+* User-defined deduction guides are only available if the compiler supports CTAD. 
 * range-related operations are only available if the standard library provides
   `<ranges>` and `<concepts>`.
 
@@ -1522,7 +1522,7 @@ _Remarks:_ Invalidates references, pointers, and iterators referring to the eras
 `template<typename Compare = std::less<T>>`<br/>
 `  void sort(Compare comp = Compare());`
 
-_Preconditions:_ `T` is is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`,
+_Preconditions:_ `T` is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`,
 [`MoveAssignable`](https://en.cppreference.com/w/cpp/named_req/MoveAssignable), 
 and [`Swappable`](https://en.cppreference.com/w/cpp/named_req/Swappable). <br/>
 _Effects:_ Sorts `*this` according to the `comp` function object.
