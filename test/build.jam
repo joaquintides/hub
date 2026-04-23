@@ -20,13 +20,16 @@ project
       <target-os>cygwin:<define>_XOPEN_SOURCE=600
       <warnings>extra
       <toolset>intel:<warnings>on
-      <toolset>msvc:<warnings-as-errors>on
-      <toolset>clang:<warnings-as-errors>on
-      <toolset>gcc:<warnings-as-errors>on
     ;
 
-run test_api.cpp ;
-run test_pocxx.cpp ;
-run test_sort.cpp ;
-run test_stability.cpp ;
-run test_uses_allocator.cpp ;
+local warnings_as_errors =
+    <toolset>msvc:<warnings-as-errors>on
+    <toolset>clang:<warnings-as-errors>on
+    <toolset>gcc:<warnings-as-errors>on
+;
+
+run test_api.cpp            : : : $(warnings_as_errors) ;
+run test_pocxx.cpp          : : : $(warnings_as_errors) ;
+run test_sort.cpp           : : : $(warnings_as_errors) ;
+run test_stability.cpp      : : : $(warnings_as_errors) ;
+run test_uses_allocator.cpp : : : $(warnings_as_errors) ;
