@@ -4,11 +4,17 @@
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
+#include <boost/config.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <type_traits>
 #include "utility.hpp"
+
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4127) /* conditional expression is constant */
+#endif
 
 template<typename Hub, typename Propagate, typename AlwaysEqual>
 void test()
@@ -73,6 +79,10 @@ void test()
     BOOST_TEST(pocs? ny1 == nx: ny1 == ny);
   }
 }
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4127 */
+#endif
 
 template<typename Hub>
 void test()
