@@ -1,10 +1,12 @@
-/* Copyright 2025 Joaquin M Lopez Munoz.
+/* Copyright 2025-2026 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
 #include <algorithm>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <functional>
@@ -74,6 +76,11 @@ void save_track_info(Hub& x, track_info_vector<Hub>& track)
   }
 }
 
+#if BOOST_WORKAROUND(BOOST_GCC, < 70000)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 template<typename Hub, typename F>
 bool check_stability(F f, track_info_vector<Hub>&& track = {})
 {
@@ -89,6 +96,10 @@ bool check_stability(F f, track_info_vector<Hub>&& track = {})
   for(const auto& info: track) if(!info.valid()) return false;
   return true;
 }
+
+#if BOOST_WORKAROUND(BOOST_GCC, < 70000)
+#pragma GCC diagnostic pop
+#endif
 
 template<typename Hub, typename F>
 bool check_stability(Hub& x, F f, track_info_vector<Hub>&& track = {})
