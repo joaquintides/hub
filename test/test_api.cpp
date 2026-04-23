@@ -82,7 +82,7 @@ using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
-  std::true_type, const typename Hub::allocator_type& al, Args&&... args)
+  std::true_type, const typename Hub::allocator_type&, Args&&... args)
 {
   return Hub(std::forward<Args>(args)...);
 }
