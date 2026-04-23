@@ -18,6 +18,7 @@ project
       <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
       <target-os>cygwin:<define>_XOPEN_SOURCE=600
+      <warnings>all
       <warnings>extra
       <toolset>intel:<warnings>on
       <toolset>msvc:<warnings-as-errors>on
