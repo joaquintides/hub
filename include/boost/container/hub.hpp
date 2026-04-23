@@ -1234,6 +1234,11 @@ public:
     return (size_type)(s - size_);
   }
 
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4127) /* conditional expression is constant */
+#endif
+
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
   {
@@ -1259,6 +1264,10 @@ public:
     }
     compact_sort(comp);
   }
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4127 */
+#endif
 
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
   {   
