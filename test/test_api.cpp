@@ -224,8 +224,8 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* [sequence.reqmts/69.1] */
 
-    Hub x = noalloc_construct<Hub>(al, 20, 20);
-    BOOST_TEST_EQ(x.size(), 20);
+    Hub x = noalloc_construct<Hub>(al, 20u, 20u);
+    BOOST_TEST_EQ(x.size(), 20u);
   }
   {
     Hub x = noalloc_construct<Hub>(al, rng.begin(), rng.end()), 
