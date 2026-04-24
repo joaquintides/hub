@@ -495,13 +495,14 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST_EQ(x.size(), rng.size() - 1);
     BOOST_TEST(it == std::prev(x.cend()));
 
-    it = x.erase(std::next(x.cbegin(), x.size() / 2), x.cend());
-    BOOST_TEST_EQ(x.size(), (rng.size() - 1) / 2);
+    it = x.erase(
+      std::next(x.cbegin(), (difference_type)(x.size() / 2)), x.cend());
+    BOOST_TEST_EQ(x.size(), (difference_type)(rng.size() - 1) / 2);
     BOOST_TEST(it == x.cend());
   }
   {
     Hub x0{rng.begin(), rng.end(), al}, 
-        y0{rng.begin(), rng.begin() + rng.size() / 2, al},
+        y0{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al},
         x = x0, y = y0;
 
     x.swap(x);
