@@ -1694,7 +1694,7 @@ private:
   void compact_sort(Compare comp)
   {
     /* compact elements and build an array of pointers to data chunks of N */
-    using sort_iterator = hub_detail::sort_iterator<T, N>;
+    using sort_iterator = hub_detail::sort_iterator<T, (std::size_t)N>;
 
     if(size_ > 1) {
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
