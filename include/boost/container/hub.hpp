@@ -1592,7 +1592,7 @@ private:
     typename Construct, typename Insert
   >
   void range_assign_impl(
-    Incrementable first, Sentinel last, Construct construct_, Insert insert)
+    Incrementable first, Sentinel last, Construct construct_, Insert insert_)
   {
     auto pbb = blist.next;
     int  n = -1;
@@ -1603,7 +1603,7 @@ private:
         n = 0;
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
           if(pb->mask & bit) { /* full slot */
-            insert(boost::to_address(pb->data() + n), first++);
+            insert_(boost::to_address(pb->data() + n), first++);
           }
           else { /* empty slot */
             construct_(boost::to_address(pb->data() + n), first++);
