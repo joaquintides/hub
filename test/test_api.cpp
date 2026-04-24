@@ -224,7 +224,9 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* [sequence.reqmts/69.1] */
 
-    Hub x = noalloc_construct<Hub>(al, 20u, 20u);
+    using hub2 = rebind_value_type_t<Hub, unsigned int>;
+
+    hub2 x = noalloc_construct<hub2>(al, 20u, 20u);
     BOOST_TEST_EQ(x.size(), 20u);
   }
   {
