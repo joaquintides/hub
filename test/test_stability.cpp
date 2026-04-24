@@ -123,6 +123,7 @@ template<typename Hub>
 void test()
 {
   using value_type = typename Hub::value_type;
+  using difference_type = typename Hub::difference_type;
   using erase_callback = ::erase_callback<Hub>;
 
   auto rng = make_range<value_type>(200);
@@ -183,22 +184,22 @@ void test()
   {
     Hub x(rng.begin(), rng.end());
     BOOST_TEST(check_stability(x, [&] (erase_callback callback) { 
-      auto first = std::next(x.begin(), (std::ptrdiff_t)(x.size() / 3)),
-           last = std::next(x.begin(), (std::ptrdiff_t)(x.size() * 2 / 3));
+      auto first = std::next(x.begin(), (difference_type)(x.size() / 3)),
+           last = std::next(x.begin(), (difference_type)(x.size() * 2 / 3));
       for(auto it = first; it != last; ++it) callback(it);
       x.erase(first,last);
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + (std::ptrdiff_t)(rng.size() / 2)),
-        y(rng.begin() + (std::ptrdiff_t)(rng.size() / 2), rng.end());
+    Hub x(rng.begin(), rng.begin() + (difference_type)(rng.size() / 2)),
+        y(rng.begin() + (difference_type)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.swap(y); 
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + (std::ptrdiff_t)(rng.size() / 2)),
-        y(rng.begin() + (std::ptrdiff_t)(rng.size() / 2), rng.end());
+    Hub x(rng.begin(), rng.begin() + (difference_type)(rng.size() / 2)),
+        y(rng.begin() + (difference_type)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.splice(y); 
     }));

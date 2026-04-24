@@ -296,7 +296,7 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, il);
   }
   {
-    Hub x{rng.begin(), rng.begin() + rng.size() / 2, al};
+    Hub x{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al};
     puncture(x);
     x.assign(rng.begin(), rng.end());
     test_equal(x, rng);
