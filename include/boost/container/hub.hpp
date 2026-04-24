@@ -1567,13 +1567,13 @@ private:
 
   template<typename Incrementable, typename Sentinel, typename Construct>
   void range_insert_impl(
-    Incrementable first, Sentinel last, Construct construct)
+    Incrementable first, Sentinel last, Construct construct_)
   {
     while(first != last) {
       int  n;
       auto pb = retrieve_available_block(n);
       for(; ; ) {
-        construct(boost::to_address(pb->data() + n), first++);
+        construct_(boost::to_address(pb->data() + n), first++);
         ++size_;
         if(BOOST_UNLIKELY(pb->mask == 0)) blist.link_at_back(pb);
         pb->mask |= pb->mask +1;
@@ -1592,7 +1592,7 @@ private:
     typename Construct, typename Insert
   >
   void range_assign_impl(
-    Incrementable first, Sentinel last, Construct construct, Insert insert)
+    Incrementable first, Sentinel last, Construct construct_, Insert insert)
   {
     auto pbb = blist.next;
     int  n = -1;
@@ -1606,7 +1606,7 @@ private:
             insert(boost::to_address(pb->data() + n), first++);
           }
           else { /* empty slot */
-            construct(boost::to_address(pb->data() + n), first++);
+            construct_(boost::to_address(pb->data() + n), first++);
             ++size_;
             pb->mask |= bit;
             if(pb->mask == full) blist.unlink_available(pb);
@@ -1618,7 +1618,7 @@ private:
     }
     if(first != last) {
       /* all active blocks consumed, keep inserting */
-      range_insert_impl(first, last, construct);
+      range_insert_impl(first, last, construct_);
     }
     else{
       /* erase remaining original elements */
