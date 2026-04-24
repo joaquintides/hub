@@ -24,7 +24,6 @@ project
       <toolset>gcc:<cxxflags>-Wsign-conversion
       <toolset>gcc:<cxxflags>-Wconversion
       <toolset>gcc:<cxxflags>-Wundef
-      <toolset>gcc:<cxxflags>-Wold-style-cast
       <toolset>gcc:<cxxflags>-Wfloat-equal
       <toolset>gcc:<cxxflags>-Wshadow
       <toolset>gcc:<cxxflags>-Wcast-qual
@@ -37,7 +36,6 @@ project
       <toolset>clang:<cxxflags>-Wsign-conversion
       <toolset>clang:<cxxflags>-Wconversion
       <toolset>clang:<cxxflags>-Wundef
-      <toolset>clang:<cxxflags>-Wold-style-cast
       <toolset>clang:<cxxflags>-Wfloat-equal
       <toolset>clang:<cxxflags>-Wshadow
       <toolset>clang:<cxxflags>-Wcast-qual
