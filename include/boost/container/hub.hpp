@@ -507,11 +507,11 @@ struct sort_iterator
   using reference = T&;
   using iterator_category = std::random_access_iterator_tag;
 
-  sort_iterator(T** pp_, std::size_t index_): pp{pp_}, index{index_} {}
+  sort_iterator(T** pp_, difference_type index_): pp{pp_}, index{index_} {}
 
   pointer operator->() const noexcept
   {
-    return pp[index / N] + (index % N);
+    return pp[(std::size_t)index / N] + ((std::size_t)index % N);
   }
 
   reference operator*() const noexcept
@@ -548,7 +548,7 @@ struct sort_iterator
   friend difference_type
   operator-(const sort_iterator& x, const sort_iterator& y) noexcept
   {
-    return (difference_type)(x.index - y.index);
+    return x.index - y.index;
   }
 
   sort_iterator& operator+=(difference_type n) noexcept
@@ -622,8 +622,8 @@ struct sort_iterator
     return x.index >= y.index;
   }
 
-  T** pp;
-  std::size_t index;
+  T**             pp;
+  difference_type index;
 };
 
 template<typename T, typename Allocator>
@@ -1707,7 +1707,8 @@ private:
       BOOST_ASSERT(i == n);
 
       std::sort(
-        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
+        sort_iterator{p.get(), 0},
+        sort_iterator{p.get(), (std::ptrdiff_t)size_}, comp);
     }
   }
 
