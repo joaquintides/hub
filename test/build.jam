@@ -14,10 +14,43 @@ project
       <library>/boost/hub//boost_hub
       <library>/boost/config//boost_config
       <library>/boost/core//boost_core
-      <library>/boost/interprocess//boost_interprocess
+      <library>/boost/interprocess//boost_interprocess/<warnings-as-errors>off
       <library>/boost/uuid//boost_uuid
       <toolset>msvc:<cxxflags>-D_SCL_SECURE_NO_WARNINGS
       <target-os>cygwin:<define>_XOPEN_SOURCE=600
+
+      <warnings>extra
+
+      <toolset>gcc:<cxxflags>-Wsign-conversion
+      <toolset>gcc:<cxxflags>-Wconversion
+      <toolset>gcc:<cxxflags>-Wundef
+      <toolset>gcc:<cxxflags>-Wfloat-equal
+      <toolset>gcc:<cxxflags>-Wshadow
+      <toolset>gcc:<cxxflags>-Wcast-qual
+      <toolset>gcc:<cxxflags>-Wcast-align
+      <toolset>gcc:<cxxflags>-Wlogical-op
+      <toolset>gcc:<cxxflags>-Wdouble-promotion
+      <toolset>gcc:<cxxflags>-Wformat=2
+      <toolset>gcc:<cxxflags>-Wstack-protector
+
+      <toolset>clang:<cxxflags>-Wsign-conversion
+      <toolset>clang:<cxxflags>-Wconversion
+      <toolset>clang:<cxxflags>-Wundef
+      <toolset>clang:<cxxflags>-Wfloat-equal
+      <toolset>clang:<cxxflags>-Wshadow
+      <toolset>clang:<cxxflags>-Wcast-qual
+      <toolset>clang:<cxxflags>-Wcast-align
+      <toolset>clang-20:<cxxflags>-Wdouble-promotion # not available in Clang < 3.8, pick one version
+      <toolset>clang:<cxxflags>-Wformat=2
+      <toolset>clang:<cxxflags>-Wnull-dereference
+      <toolset>clang:<cxxflags>-Wthread-safety
+      <toolset>clang-20:<cxxflags>-Wunused-lambda-capture # not available in Clang < 5, pick one version
+      <toolset>clang:<cxxflags>-Wassign-enum
+
+      <toolset>intel:<warnings>on
+      <toolset>msvc:<warnings-as-errors>on
+      <toolset>clang:<warnings-as-errors>on
+      <toolset>gcc:<warnings-as-errors>on
     ;
 
 run test_api.cpp ;

@@ -82,7 +82,7 @@ using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
 
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
-  std::true_type, const typename Hub::allocator_type& al, Args&&... args)
+  std::true_type, const typename Hub::allocator_type&, Args&&... args)
 {
   return Hub(std::forward<Args>(args)...);
 }
@@ -113,7 +113,7 @@ void test_equal(const Container1& x, const Container2& y)
 template<typename Iterator, typename Mirror>
 void test_traversal(Iterator first, Iterator last, const Mirror& data)
 {
-  std::ptrdiff_t n = 0;
+  std::size_t n = 0;
   for(auto it = first; it != last; ++it, ++n)
   {
     BOOST_TEST(*it == data[n]);
@@ -224,8 +224,10 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* [sequence.reqmts/69.1] */
 
-    Hub x = noalloc_construct<Hub>(al, 20, 20);
-    BOOST_TEST_EQ(x.size(), 20);
+    using hub2 = rebind_value_type_t<Hub, unsigned int>;
+
+    hub2 x = noalloc_construct<hub2>(al, 20u, 20u);
+    BOOST_TEST_EQ(x.size(), 20u);
   }
   {
     Hub x = noalloc_construct<Hub>(al, rng.begin(), rng.end()), 
@@ -259,11 +261,11 @@ void test(const typename Hub::allocator_type& al = {})
   }
   {
     /* move construction with unequal allocators */
-    using hub = rebind_allocator_t<Hub, stateful_allocator<void>>;
-    using allocator_type = typename hub::allocator_type;
+    using hub2 = rebind_allocator_t<Hub, stateful_allocator<void>>;
+    using allocator_type2 = typename hub2::allocator_type;
 
-    hub x{rng.begin(), rng.end(), allocator_type{0}},
-        y{std::move(x), allocator_type{1}};
+    hub2 x{rng.begin(), rng.end(), allocator_type2{0}},
+         y{std::move(x), allocator_type2{1}};
     BOOST_TEST_EQ(x.get_allocator().state, 0);
     BOOST_TEST(x.empty());
     BOOST_TEST_EQ(y.get_allocator().state, 1);
@@ -294,7 +296,7 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, il);
   }
   {
-    Hub x{rng.begin(), rng.begin() + rng.size() / 2, al};
+    Hub x{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al};
     puncture(x);
     x.assign(rng.begin(), rng.end());
     test_equal(x, rng);
@@ -493,13 +495,14 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST_EQ(x.size(), rng.size() - 1);
     BOOST_TEST(it == std::prev(x.cend()));
 
-    it = x.erase(std::next(x.cbegin(), x.size() / 2), x.cend());
-    BOOST_TEST_EQ(x.size(), (rng.size() - 1) / 2);
+    it = x.erase(
+      std::next(x.cbegin(), (difference_type)(x.size() / 2)), x.cend());
+    BOOST_TEST_EQ(x.size(), (difference_type)(rng.size() - 1) / 2);
     BOOST_TEST(it == x.cend());
   }
   {
     Hub x0{rng.begin(), rng.end(), al}, 
-        y0{rng.begin(), rng.begin() + rng.size() / 2, al},
+        y0{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al},
         x = x0, y = y0;
 
     x.swap(x);
@@ -584,8 +587,8 @@ void test(const typename Hub::allocator_type& al = {})
     puncture(x);
 
     unsigned int res = 0;
-    auto         f = [&] (value_type& x) { res += (unsigned int)x;};
-    auto         cf = [&] (const value_type& x) { res += (unsigned int)x;};
+    auto         f = [&] (value_type& v) { res += (unsigned int)v;};
+    auto         cf = [&] (const value_type& v) { res += (unsigned int)v;};
 
     for(std::size_t i = 0; i < x.size() / 2; ++i) {
       auto first = std::next(x.begin(), (int)i),
@@ -625,14 +628,14 @@ void test(const typename Hub::allocator_type& al = {})
 
     unsigned int res = 0;
     std::size_t  n = 0;
-    auto         f = [&] (value_type& x) {
+    auto         f = [&] (value_type& v) {
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
-    auto         cf = [&] (const value_type& x) { 
+    auto         cf = [&] (const value_type& v) { 
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
 
@@ -641,15 +644,15 @@ void test(const typename Hub::allocator_type& al = {})
       auto cfirst = std::next(x.cbegin(), (int)i);
 
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it1 = x.visit_while(first, x.end(), f);
       auto res1 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it2 = cx.visit_while(cfirst, cx.end(), cf);
       auto res2 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it3 = std::find_if_not(first, x.end(), f);
       auto res3 = res;
       BOOST_TEST(it1 == it3);

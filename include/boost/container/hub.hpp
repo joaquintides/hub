@@ -507,11 +507,11 @@ struct sort_iterator
   using reference = T&;
   using iterator_category = std::random_access_iterator_tag;
 
-  sort_iterator(T** pp_, std::size_t index_): pp{pp_}, index{index_} {}
+  sort_iterator(T** pp_, difference_type index_): pp{pp_}, index{index_} {}
 
   pointer operator->() const noexcept
   {
-    return pp[index / N] + (index % N);
+    return pp[(std::size_t)index / N] + ((std::size_t)index % N);
   }
 
   reference operator*() const noexcept
@@ -548,7 +548,7 @@ struct sort_iterator
   friend difference_type
   operator-(const sort_iterator& x, const sort_iterator& y) noexcept
   {
-    return (difference_type)(x.index - y.index);
+    return x.index - y.index;
   }
 
   sort_iterator& operator+=(difference_type n) noexcept
@@ -622,8 +622,8 @@ struct sort_iterator
     return x.index >= y.index;
   }
 
-  T** pp;
-  std::size_t index;
+  T**             pp;
+  difference_type index;
 };
 
 template<typename T, typename Allocator>
@@ -1212,8 +1212,8 @@ public:
       --x.num_blocks;
       ++num_blocks;
       auto s = core::popcount(pb->mask);
-      x.size_ -= s;
-      size_ += s;
+      x.size_ -= (size_type)s;
+      size_ += (size_type)s;
     }
   }
 
@@ -1233,6 +1233,11 @@ public:
     }
     return (size_type)(s - size_);
   }
+
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4127) /* conditional expression is constant */
+#endif
 
   template<typename Compare = std::less<T>>
   void sort(Compare comp = Compare())
@@ -1259,6 +1264,10 @@ public:
     }
     compact_sort(comp);
   }
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4127 */
+#endif
 
   iterator get_iterator(const_pointer p) noexcept /* noexcept? */
   {   
@@ -1558,13 +1567,13 @@ private:
 
   template<typename Incrementable, typename Sentinel, typename Construct>
   void range_insert_impl(
-    Incrementable first, Sentinel last, Construct construct)
+    Incrementable first, Sentinel last, Construct construct_)
   {
     while(first != last) {
       int  n;
       auto pb = retrieve_available_block(n);
       for(; ; ) {
-        construct(boost::to_address(pb->data() + n), first++);
+        construct_(boost::to_address(pb->data() + n), first++);
         ++size_;
         if(BOOST_UNLIKELY(pb->mask == 0)) blist.link_at_back(pb);
         pb->mask |= pb->mask +1;
@@ -1583,7 +1592,7 @@ private:
     typename Construct, typename Insert
   >
   void range_assign_impl(
-    Incrementable first, Sentinel last, Construct construct, Insert insert)
+    Incrementable first, Sentinel last, Construct construct_, Insert insert_)
   {
     auto pbb = blist.next;
     int  n = -1;
@@ -1594,10 +1603,10 @@ private:
         n = 0;
         for(mask_type bit = 1; bit; bit <<= 1, ++n) {
           if(pb->mask & bit) { /* full slot */
-            insert(boost::to_address(pb->data() + n), first++);
+            insert_(boost::to_address(pb->data() + n), first++);
           }
           else { /* empty slot */
-            construct(boost::to_address(pb->data() + n), first++);
+            construct_(boost::to_address(pb->data() + n), first++);
             ++size_;
             pb->mask |= bit;
             if(pb->mask == full) blist.unlink_available(pb);
@@ -1609,7 +1618,7 @@ private:
     }
     if(first != last) {
       /* all active blocks consumed, keep inserting */
-      range_insert_impl(first, last, construct);
+      range_insert_impl(first, last, construct_);
     }
     else{
       /* erase remaining original elements */
@@ -1685,7 +1694,7 @@ private:
   void compact_sort(Compare comp)
   {
     /* compact elements and build an array of pointers to data chunks of N */
-    using sort_iterator = hub_detail::sort_iterator<T, N>;
+    using sort_iterator = hub_detail::sort_iterator<T, (std::size_t)N>;
 
     if(size_ > 1) {
       std::size_t n = (std::size_t)((size_ + N - 1) / N);
@@ -1698,7 +1707,8 @@ private:
       BOOST_ASSERT(i == n);
 
       std::sort(
-        sort_iterator{p.get(), 0}, sort_iterator{p.get(), size_}, comp);
+        sort_iterator{p.get(), 0},
+        sort_iterator{p.get(), (std::ptrdiff_t)size_}, comp);
     }
   }
 

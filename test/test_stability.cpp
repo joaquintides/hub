@@ -1,10 +1,12 @@
-/* Copyright 2025 Joaquin M Lopez Munoz.
+/* Copyright 2025-2026 Joaquin M Lopez Munoz.
  * Distributed under the Boost Software License, Version 1.0.
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
  */
 
 #include <algorithm>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <functional>
@@ -17,7 +19,7 @@
 struct tidy_int
 {
   tidy_int(int n_ = 0): n{n_} {}
-  ~tidy_int() { n = 0xDEADBEEF; }
+  ~tidy_int() { n = 0x0BADBEEF; }
 
   operator int() const { return n; }
 
@@ -74,6 +76,11 @@ void save_track_info(Hub& x, track_info_vector<Hub>& track)
   }
 }
 
+#if BOOST_WORKAROUND(BOOST_GCC, < 70000)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 template<typename Hub, typename F>
 bool check_stability(F f, track_info_vector<Hub>&& track = {})
 {
@@ -89,6 +96,10 @@ bool check_stability(F f, track_info_vector<Hub>&& track = {})
   for(const auto& info: track) if(!info.valid()) return false;
   return true;
 }
+
+#if BOOST_WORKAROUND(BOOST_GCC, < 70000)
+#pragma GCC diagnostic pop
+#endif
 
 template<typename Hub, typename F>
 bool check_stability(Hub& x, F f, track_info_vector<Hub>&& track = {})
@@ -112,6 +123,7 @@ template<typename Hub>
 void test()
 {
   using value_type = typename Hub::value_type;
+  using difference_type = typename Hub::difference_type;
   using erase_callback = ::erase_callback<Hub>;
 
   auto rng = make_range<value_type>(200);
@@ -172,22 +184,22 @@ void test()
   {
     Hub x(rng.begin(), rng.end());
     BOOST_TEST(check_stability(x, [&] (erase_callback callback) { 
-      auto first = std::next(x.begin(), x.size() / 3),
-           last = std::next(x.begin(), x.size() * 2 / 3);
+      auto first = std::next(x.begin(), (difference_type)(x.size() / 3)),
+           last = std::next(x.begin(), (difference_type)(x.size() * 2 / 3));
       for(auto it = first; it != last; ++it) callback(it);
       x.erase(first,last);
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + rng.size() / 2),
-        y(rng.begin() + rng.size() / 2, rng.end());
+    Hub x(rng.begin(), rng.begin() + (difference_type)(rng.size() / 2)),
+        y(rng.begin() + (difference_type)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.swap(y); 
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + rng.size() / 2),
-        y(rng.begin() + rng.size() / 2, rng.end());
+    Hub x(rng.begin(), rng.begin() + (difference_type)(rng.size() / 2)),
+        y(rng.begin() + (difference_type)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.splice(y); 
     }));
