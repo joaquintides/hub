@@ -587,8 +587,8 @@ void test(const typename Hub::allocator_type& al = {})
     puncture(x);
 
     unsigned int res = 0;
-    auto         f = [&] (value_type& x) { res += (unsigned int)x;};
-    auto         cf = [&] (const value_type& x) { res += (unsigned int)x;};
+    auto         f = [&] (value_type& v) { res += (unsigned int)v;};
+    auto         cf = [&] (const value_type& v) { res += (unsigned int)v;};
 
     for(std::size_t i = 0; i < x.size() / 2; ++i) {
       auto first = std::next(x.begin(), (int)i),
@@ -628,14 +628,14 @@ void test(const typename Hub::allocator_type& al = {})
 
     unsigned int res = 0;
     std::size_t  n = 0;
-    auto         f = [&] (value_type& x) {
+    auto         f = [&] (value_type& v) {
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
-    auto         cf = [&] (const value_type& x) { 
+    auto         cf = [&] (const value_type& v) { 
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
 
