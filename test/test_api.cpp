@@ -113,7 +113,7 @@ void test_equal(const Container1& x, const Container2& y)
 template<typename Iterator, typename Mirror>
 void test_traversal(Iterator first, Iterator last, const Mirror& data)
 {
-  std::ptrdiff_t n = 0;
+  std::size_t n = 0;
   for(auto it = first; it != last; ++it, ++n)
   {
     BOOST_TEST(*it == data[n]);
@@ -641,15 +641,15 @@ void test(const typename Hub::allocator_type& al = {})
       auto cfirst = std::next(x.cbegin(), (int)i);
 
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it1 = x.visit_while(first, x.end(), f);
       auto res1 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it2 = cx.visit_while(cfirst, cx.end(), cf);
       auto res2 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it3 = std::find_if_not(first, x.end(), f);
       auto res3 = res;
       BOOST_TEST(it1 == it3);
