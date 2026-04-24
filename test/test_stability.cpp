@@ -19,7 +19,7 @@
 struct tidy_int
 {
   tidy_int(int n_ = 0): n{n_} {}
-  ~tidy_int() { n = 0xDEADBEEF; }
+  ~tidy_int() { n = 0x0BADBEEF; }
 
   operator int() const { return n; }
 
