@@ -1212,8 +1212,8 @@ public:
       --x.num_blocks;
       ++num_blocks;
       auto s = core::popcount(pb->mask);
-      x.size_ -= s;
-      size_ += s;
+      x.size_ -= (size_type)s;
+      size_ += (size_type)s;
     }
   }
 
