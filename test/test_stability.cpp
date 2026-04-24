@@ -183,22 +183,22 @@ void test()
   {
     Hub x(rng.begin(), rng.end());
     BOOST_TEST(check_stability(x, [&] (erase_callback callback) { 
-      auto first = std::next(x.begin(), x.size() / 3),
-           last = std::next(x.begin(), x.size() * 2 / 3);
+      auto first = std::next(x.begin(), (std::ptrdiff_t)(x.size() / 3)),
+           last = std::next(x.begin(), (std::ptrdiff_t)(x.size() * 2 / 3));
       for(auto it = first; it != last; ++it) callback(it);
       x.erase(first,last);
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + rng.size() / 2),
-        y(rng.begin() + rng.size() / 2, rng.end());
+    Hub x(rng.begin(), rng.begin() + (std::ptrdiff_t)(rng.size() / 2)),
+        y(rng.begin() + (std::ptrdiff_t)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.swap(y); 
     }));
   }
   {
-    Hub x(rng.begin(), rng.begin() + rng.size() / 2),
-        y(rng.begin() + rng.size() / 2, rng.end());
+    Hub x(rng.begin(), rng.begin() + (std::ptrdiff_t)(rng.size() / 2)),
+        y(rng.begin() + (std::ptrdiff_t)(rng.size() / 2), rng.end());
     BOOST_TEST(check_stability(x, y, [&] {
       x.splice(y); 
     }));
