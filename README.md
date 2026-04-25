@@ -1306,7 +1306,7 @@ _Complexity:_ Constant.
 
 `explicit hub(size_type n, const Allocator& = Allocator());`
 
-_Preconditions:_ `Tp` is [`DefaultInsertable`](https://en.cppreference.com/w/cpp/named_req/DefaultInsertable.html) into `hub`. <br/>
+_Preconditions:_ `T` is [`DefaultInsertable`](https://en.cppreference.com/w/cpp/named_req/DefaultInsertable.html) into `hub`. <br/>
 _Effects:_ Constructs a `hub` with `n` default-inserted elements, using the specified allocator. <br/> 
 _Complexity:_ Linear in `n`.
 
@@ -1332,7 +1332,7 @@ _Complexity:_ Linear in `std::ranges::distance(rg)`.
 `hub(const hub& x, const std::type_identity_t<Allocator>& alloc);`
 
 _Preconditions:_ `T` is [`CopyInsertable`](https://en.cppreference.com/w/cpp/named_req/CopyInsertable.html) into `hub`. <br/>
-_Effects:_ Constructs a `hub` object equal to `x`. If the second overload is called, uses `alloc`.
+_Effects:_ Constructs a `hub` object equal to `x`. If the second overload is called, uses `alloc`. <br/>
 _Complexity:_ Linear in `x.size()`.
 
 `hub(hub&&) noexcept;`<br/>
