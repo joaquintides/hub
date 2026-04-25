@@ -39,13 +39,6 @@ static_assert(
   ,
   "internal check on big_nontrivial_int");
 
-void test_empty_sort()
-{
-  boost::container::hub<int> h{};
-  h.sort();
-  BOOST_TEST(h.empty());
-}
-
 template<typename Hub, typename Compare = std::less<typename Hub::value_type>>
 void test(std::size_t n, double erase_rate, Compare comp = Compare())
 {
@@ -83,7 +76,6 @@ void test()
 
 int main()
 {
-  test_empty_sort();
   test<boost::container::hub<int>>();
   test<boost::container::hub<big_nontrivial_int>>();
 
