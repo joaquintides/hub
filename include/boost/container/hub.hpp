@@ -1038,11 +1038,6 @@ public:
   
   size_type capacity() const noexcept { return num_blocks * N; }
 
-  size_type memory() const noexcept // TODO: remove
-  { 
-    return num_blocks * (sizeof(block) + sizeof(T) * N); 
-  }
-
   void reserve(size_type n)
   {
     if(n > max_size()) {
