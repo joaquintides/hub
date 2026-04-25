@@ -1,6 +1,6 @@
 # Hub container
 
-[![Branch](https://img.shields.io/badge/branch-develop-brightgreen.svg)](https://github.com/joaquintides/hub/tree/develop) [![CI](https://github.com/joaquintides/hub/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/joaquintides/hub/actions/workflows/ci.yml) [![Coverage](https://joaquintides.github.io/hub/develop/gcovr/badges/coverage-lines.svg)](https://joaquintides.github.io/hub/develop/gcovr/index.html) <br/>
+[![Branch](https://img.shields.io/badge/branch-develop-brightgreen.svg)](https://github.com/joaquintides/hub/tree/develop) [![CI](https://github.com/joaquintides/hub/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/joaquintides/hub/actions/workflows/ci.yml) [![CI](https://ci.appveyor.com/api/projects/status/github/joaquintides/hub?branch=develop&svg=true)](https://ci.appveyor.com/project/joaquintides/hub) [![Coverage](https://joaquintides.github.io/hub/develop/gcovr/badges/coverage-lines.svg)](https://joaquintides.github.io/hub/develop/gcovr/index.html) <br/>
 [![BSL 1.0](https://img.shields.io/badge/license-BSL_1.0-blue.svg)](https://www.boost.org/users/license.html) <img alt="C++11 required" src="https://img.shields.io/badge/standard-C%2b%2b11-blue.svg"> <img alt="Header-only library" src="https://img.shields.io/badge/build-header--only-blue.svg">
 
 `boost::container::hub` (proposed for Boost.Container) is a nearly drop-in replacement
@@ -92,7 +92,7 @@ to install the entire Boost project or only the exact dependencies of `boost::co
 (`assert`, `config`, `core` and `throw_exception`).
 
 This is a header-only library, so no additional build phase is needed. C++11 or later required.
-The library has been verified to work with GCC 4.8, Clang 3.5 and Visual Studio 2022/MSVC 14.3 
+The library has been verified to work with GCC 4.8, Clang 3.5 and Visual Studio 2017/MSVC 14.1 
 (and later versions of those). You can check that your environment is correctly set up by
 compiling the example program shown above.
 
