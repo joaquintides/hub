@@ -39,6 +39,14 @@ static_assert(
   ,
   "internal check on big_nontrivial_int");
 
+template<typename Hub>
+void test_empty_sort()
+{
+  Hub h{};
+  h.sort();
+  BOOST_TEST(h.empty());
+}
+
 template<typename Hub, typename Compare = std::less<typename Hub::value_type>>
 void test(std::size_t n, double erase_rate, Compare comp = Compare())
 {
@@ -63,6 +71,7 @@ void test()
   constexpr std::size_t small_n = 1000,
                         large_n = 300000; /* enough to trigger compact_sort */
 
+  test_empty_sort<Hub>();
   test<Hub>(0, 0.0);
   test<Hub>(1, 0.0);
 
