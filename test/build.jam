@@ -54,6 +54,7 @@ project
     ;
 
 run test_api.cpp ;
+run test_empty_sort.cpp ;
 run test_pocxx.cpp ;
 run test_sort.cpp ;
 run test_stability.cpp ;
