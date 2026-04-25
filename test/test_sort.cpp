@@ -39,10 +39,9 @@ static_assert(
   ,
   "internal check on big_nontrivial_int");
 
-template<typename Hub>
 void test_empty_sort()
 {
-  Hub h{};
+  boost::container::hub<int> h{};
   h.sort();
   BOOST_TEST(h.empty());
 }
@@ -71,7 +70,6 @@ void test()
   constexpr std::size_t small_n = 1000,
                         large_n = 300000; /* enough to trigger compact_sort */
 
-  test_empty_sort<Hub>();
   test<Hub>(0, 0.0);
   test<Hub>(1, 0.0);
 
@@ -85,6 +83,7 @@ void test()
 
 int main()
 {
+  test_empty_sort();
   test<boost::container::hub<int>>();
   test<boost::container::hub<big_nontrivial_int>>();
 
