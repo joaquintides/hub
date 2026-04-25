@@ -1626,15 +1626,17 @@ private:
   bool transfer_sort(Compare comp)
   {
     /* transfer to a buffer, sort and transfer back */
-    hub_detail::buffer<T,Allocator> buf(size_, al());
-    if(!buf.data) return false;
+    if(size_ > 1) {
+      hub_detail::buffer<T,Allocator> buf(size_, al());
+      if(!buf.data) return false;
 
-    visit_all([&] (value_type& x) { buf.emplace_back(std::move(x)); });
-    std::sort(buf.begin(), buf.end(), comp);
-    visit_all([&] (value_type& x) { 
-      x = std::move(*buf.begin());
-      buf.erase_front();
-    });
+      visit_all([&] (value_type& x) { buf.emplace_back(std::move(x)); });
+      std::sort(buf.begin(), buf.end(), comp);
+      visit_all([&] (value_type& x) { 
+        x = std::move(*buf.begin());
+        buf.erase_front();
+      });
+    }
     return true;
   }
 
