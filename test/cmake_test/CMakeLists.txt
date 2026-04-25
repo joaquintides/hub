@@ -21,7 +21,6 @@ else()
       throw_exception
       # Secondary dependencies
       move
-      static_assert
       type_traits
     )
 
