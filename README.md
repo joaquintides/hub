@@ -1535,6 +1535,7 @@ References, pointers, and iterators referring to elements in `*this` may be inva
 
 _Preconditions:_ `p` points to an element in `*this`. <br/>
 _Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`. <br/>
+_Throws:_ Nothing. <br/>
 _Complexity:_ Linear in the number of active blocks in _*this_.
 
 <a name="ref-internal-visitation"></a>
