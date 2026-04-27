@@ -1264,20 +1264,29 @@ public:
 #pragma warning(pop) /* C4127 */
 #endif
 
-  iterator get_iterator(const_pointer p) noexcept /* noexcept? */
+  iterator get_iterator(const_pointer p)
   {   
     std::less<const T*> less;
     for(auto pbb = blist.next; pbb != blist.header(); pbb = pbb-> next) {
       auto pb = static_cast_block_pointer(pbb);
       if(!less(boost::to_address(p), boost::to_address(pb->data())) &&
           less(boost::to_address(p), boost::to_address(pb->data() + N))) {
-        return {pb, (int)(p - pb->data())};
+        int n = (int)(p - pb->data());
+        BOOST_ASSERT_MSG(
+          (pb->mask & (mask_type)(1) << n) != 0,
+          "p points to an invalid element");
+        return {pb, n};
       }
     }
-    return end(); /* shouldn't assert? */
+    BOOST_ASSERT_MSG(false, "p does not point into the extents of *this");
+#if defined(BOOST_ASSERT_HANDLER_IS_NORETURN)
+    BOOST_UNREACHABLE_RETURN(end());
+#else
+    return end();
+#endif
   }
 
-  const_iterator get_iterator(const_pointer p) const noexcept /* noexcept? */
+  const_iterator get_iterator(const_pointer p) const
   {
     return const_cast<hub*>(this)->get_iterator(p);
   }

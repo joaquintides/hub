@@ -309,6 +309,7 @@ i.e. those without any used slot).
 Making them so would require extra block metadata and bookkeeping, and this overhead
 was not deemed worth imposing over the potential usefulness of having ordered
 iterators.
+* `get_iterator` is not `noexcept`.
 * No operations are marked `constexpr`.
 
 The following functionality is specific to `boost::container::hub`:
@@ -1120,9 +1121,6 @@ all the blocks in the container are full or if the user issues a `reserve` opera
 namespace boost {
 namespace container {
 
-using from_range_t = /* implementation-defined */;
-inline constexpr from_range_t from_range {};
-
 template<typename T, typename Allocator = std::allocator<T>>
 class hub
 {
@@ -1227,8 +1225,8 @@ public:
   template<typename Compare = std::less<T>>
     void sort(Compare comp = Compare());
 
-  iterator get_iterator(const_pointer p) noexcept;
-  const_iterator get_iterator(const_pointer p) const noexcept;
+  iterator get_iterator(const_pointer p);
+  const_iterator get_iterator(const_pointer p) const;
 
   // internal visitation
   template<typename F>
@@ -1532,11 +1530,12 @@ _Remarks:_ May allocate.
 References, pointers, and iterators referring to elements in `*this` may be invalidated. <br/>
 (Note: The sorting algorithm used is not stable.)
 
-`iterator get_iterator(const_pointer p) noexcept;`<br/>
-`const_iterator get_iterator(const_pointer p) const noexcept;`
+`iterator get_iterator(const_pointer p);`<br/>
+`const_iterator get_iterator(const_pointer p) const;`
 
 _Preconditions:_ `p` points to an element in `*this`. <br/>
 _Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`. <br/>
+_Throws:_ Nothing. <br/>
 _Complexity:_ Linear in the number of active blocks in _*this_.
 
 <a name="ref-internal-visitation"></a>
