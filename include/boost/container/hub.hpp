@@ -1273,7 +1273,7 @@ public:
           less(boost::to_address(p), boost::to_address(pb->data() + N))) {
         int n = (int)(p - pb->data());
         BOOST_ASSERT_MSG(
-          (pb->mask & (mask_type)(1) << n) != 0,
+          (pb->mask & ((mask_type)(1) << n)) != 0,
           "p points to an invalid element");
         return {pb, n};
       }
