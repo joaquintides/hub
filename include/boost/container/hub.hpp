@@ -482,10 +482,12 @@ private:
   template<typename> friend class iterator;
   template<typename, typename> friend class container::hub;
   template<typename VP, typename F>
-  friend iterator<VP> container::for_each_while(iterator<VP>, iterator<VP>, F);
+  friend hub_detail::iterator<VP> container::for_each_while(
+    hub_detail::iterator<VP>, hub_detail::iterator<VP>, F);
   template<typename HubIt, typename F>
   friend HubIt for_each_while_core(
-  typename HubIt::block_base_pointer,typename HubIt::block_base_pointer, F&&);
+    typename HubIt::block_base_pointer,typename HubIt::block_base_pointer,
+    F&&);
 
   template<typename T>
   using pointer_rebind_t = hub_detail::pointer_rebind_t<ValuePointer, T>;
