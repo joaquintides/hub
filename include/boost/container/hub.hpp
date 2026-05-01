@@ -130,7 +130,10 @@ template<typename ValuePointer> class iterator;
 template<typename ValuePtr, typename F>
 hub_detail::iterator<ValuePtr>
 for_each_while(
-  hub_detail::iterator<ValuePtr>, hub_detail::iterator<ValuePtr>, F f);
+  hub_detail::iterator<ValuePtr>, hub_detail::iterator<ValuePtr>, F);
+
+template<typename T, typename Allocator, typename F>
+typename hub<T, Allocator>::iterator for_each(hub<T, Allocator>&, F);
 
 #ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
 namespace pmr {
