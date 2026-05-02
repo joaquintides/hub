@@ -1859,17 +1859,17 @@ std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   F f)
 {
   for(auto pbb = first.pbb; first != last; ) {
-    if(!f(*first)) return {first, f};
+    if(!f(*first)) return {first, std::move(f)};
     ++first;
     if(first.pbb != pbb) break;
   }
   if(first.pbb != last.pbb) {
     first = hub_detail::for_each_while_core<hub_detail::iterator<ValuePtr>>(
       first.pbb, last.pbb, f);
-    if(first.pbb != last.pbb) return {first, f};
+    if(first.pbb != last.pbb) return {first, std::move(f)};
   }
-  for(; first != last; ++first) if(!f(*first)) return {first, f};
-  return {first, f};
+  for(; first != last; ++first) if(!f(*first)) return {first, std::move(f)};
+  return {first, std::move(f)};
 }
 
 template<typename T, typename Allocator, typename F>
@@ -1890,14 +1890,18 @@ template<typename T, typename Allocator, typename F>
 std::pair<typename hub<T, Allocator>::iterator, F>
 for_each_while(hub<T, Allocator>& x, F f)
 {
-  return {container::for_each_while(x.begin(), x.end(), std::ref(f)).first, f};
+  return {
+    container::for_each_while(x.begin(), x.end(), std::ref(f)).first, 
+    std::move(f)};
 }
 
 template<typename T, typename Allocator, typename F>
 std::pair<typename hub<T, Allocator>::const_iterator, F>
 for_each_while(const hub<T, Allocator>& x, F f)
 {
-  return {container::for_each_while(x.begin(), x.end(), std::ref(f)).first, f};
+  return {
+    container::for_each_while(x.begin(), x.end(), std::ref(f)).first,
+    std::move(f)};
 }
 
 } /* namespace container */
