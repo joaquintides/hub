@@ -128,12 +128,11 @@ template<typename ValuePointer> class iterator;
 }
 
 template<typename ValuePtr, typename F>
-hub_detail::iterator<ValuePtr>
-for_each_while(
+std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   hub_detail::iterator<ValuePtr>, hub_detail::iterator<ValuePtr>, F);
 
 template<typename T, typename Allocator, typename F>
-typename hub<T, Allocator>::iterator for_each(hub<T, Allocator>&, F);
+F for_each(hub<T, Allocator>&, F);
 
 #ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
 namespace pmr {
@@ -482,7 +481,7 @@ private:
   template<typename> friend class iterator;
   template<typename, typename> friend class container::hub;
   template<typename VP, typename F>
-  friend hub_detail::iterator<VP> container::for_each_while(
+  friend std::pair<hub_detail::iterator<VP>, F> container::for_each_while(
     hub_detail::iterator<VP>, hub_detail::iterator<VP>, F);
   template<typename HubIt, typename F>
   friend HubIt for_each_while_core(
@@ -1843,63 +1842,62 @@ erase_if(hub<T, Allocator>& x, Predicate pred)
 }
 
 template<typename ValuePtr, typename F>
-hub_detail::iterator<ValuePtr> 
-for_each(
+F for_each(
   hub_detail::iterator<ValuePtr> first, hub_detail::iterator<ValuePtr> last,
   F f)
 {
   using reference = typename hub_detail::iterator<ValuePtr>::reference;
 
-  return container::for_each_while(
+  container::for_each_while(
     first, last, [&] (reference x) { f(x); return true; });
+  return f;
 }
 
 template<typename ValuePtr, typename F>
-hub_detail::iterator<ValuePtr>
-for_each_while(
+std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   hub_detail::iterator<ValuePtr> first, hub_detail::iterator<ValuePtr> last,
   F f)
 {
   for(auto pbb = first.pbb; first != last; ) {
-    if(!f(*first)) return first;
+    if(!f(*first)) return {first, f};
     ++first;
     if(first.pbb != pbb) break;
   }
   if(first.pbb != last.pbb) {
     first = hub_detail::for_each_while_core<hub_detail::iterator<ValuePtr>>(
       first.pbb, last.pbb, f);
-    if(first.pbb != last.pbb) return first;
+    if(first.pbb != last.pbb) return {first, f};
   }
-  for(; first != last; ++first) if(!f(*first)) return first;
-  return first;
+  for(; first != last; ++first) if(!f(*first)) return {first, f};
+  return {first, f};
 }
 
 template<typename T, typename Allocator, typename F>
-typename hub<T, Allocator>::iterator
-for_each(hub<T, Allocator>& x, F f)
+F for_each(hub<T, Allocator>& x, F f)
 {
-  return container::for_each(x.begin(), x.end(), std::ref(f));
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
 }
 
 template<typename T, typename Allocator, typename F>
-typename hub<T, Allocator>::const_iterator 
-for_each(const hub<T, Allocator>& x, F f)
+F for_each(const hub<T, Allocator>& x, F f)
 {
-  return container::for_each(x.begin(), x.end(), std::ref(f));
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
 }
 
 template<typename T, typename Allocator, typename F>
-typename hub<T, Allocator>::iterator
+std::pair<typename hub<T, Allocator>::iterator, F>
 for_each_while(hub<T, Allocator>& x, F f)
 {
-  return container::for_each_while(x.begin(), x.end(), std::ref(f));
+  return {container::for_each_while(x.begin(), x.end(), std::ref(f)).first, f};
 }
 
 template<typename T, typename Allocator, typename F>
-typename hub<T, Allocator>::const_iterator
+std::pair<typename hub<T, Allocator>::const_iterator, F>
 for_each_while(const hub<T, Allocator>& x, F f)
 {
-  return container::for_each_while(x.begin(), x.end(), std::ref(f));
+  return {container::for_each_while(x.begin(), x.end(), std::ref(f)).first, f};
 }
 
 } /* namespace container */
