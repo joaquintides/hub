@@ -37,8 +37,8 @@ the current reference implementation of this standard container.
     * [Capacity](#ref-capacity)
     * [Modifiers](#modifiers)
     * [`std::hive` operations](#ref-stdhive-operations)
-    * [Internal visitation](#ref-internal-visitation)
     * [Erasure](#erasure)
+    * [Visitation](#ref-visitation)
 
 ## Introduction
 
@@ -1069,6 +1069,22 @@ template<typename T, typename Allocator, typename Predicate>
   typename hub<T, Allocator>::size_type
     erase_if(hub<T, Allocator>& x, Predicate pred);
 
+template</* implementation-defined-parameters */, typename F>
+  F for_each(/* hub-iterator */ first, /* hub-iterator */ last, F f);
+template</* implementation-defined-parameters */, typename F>
+  std::pair</* hub-iterator */, F>
+    for_each_while(/* hub-iterator */ first, /* hub-iterator */ last, F f);
+template<typename T, typename Allocator, typename F>
+  F for_each(hub<T, Allocator>& x, F f);
+template<typename T, typename Allocator, typename F>
+  F for_each(const hub<T, Allocator>& x, F f);
+template<typename T, typename Allocator, typename F>
+  std::pair<typename hub<T, Allocator>::iterator, F>
+    for_each_while(hub<T, Allocator>& x, F f);
+template<typename T, typename Allocator, typename F>
+  std::pair<typename hub<T, Allocator>::const_iterator, F>
+    for_each_while(const hub<T, Allocator>& x, F f);
+
 namespace pmr {
 
 template<typename T>
@@ -1227,24 +1243,6 @@ public:
 
   iterator get_iterator(const_pointer p);
   const_iterator get_iterator(const_pointer p) const;
-
-  // internal visitation
-  template<typename F>
-    void visit(iterator first, iterator last, F f);
-  template<typename F>
-    void visit(const_iterator first, const_iterator last, F f) const;
-  template<typename F>
-    iterator visit_while(iterator first, iterator last, F f);
-  template<typename F>
-    const_iterator visit_while(const_iterator first, const_iterator last, F f) const;
-  template<typename F>
-    void visit_all(F f);
-  template<typename F>
-    void visit_all(F f) const;
-  template<typename F>
-    iterator visit_all_while(F f);
-  template<typename F>
-    const_iterator visit_all_while(F f) const;
 };
 
 template<
@@ -1538,48 +1536,6 @@ _Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`
 _Throws:_ Nothing. <br/>
 _Complexity:_ Linear in the number of active blocks in _*this_.
 
-<a name="ref-internal-visitation"></a>
-####   Internal visitation
-
-`template<typename F>`<br/>
-`  void visit(iterator first, iterator last, F f);`<br/>
-`template<typename F>`<br/>
-`  void visit(const_iterator first, const_iterator last, F f) const;`
-
-_Preconditions:_ [`first`, `last`) is a valid range on `*this`. <br/>
-_Effects:_ Equivalent to: `while(first != last) f(*first++);` <br/>
-(Note: Potentially faster than the sample code due to internal optimizations.)
-
-`template<typename F>`<br/>
-`  iterator visit_while(iterator first, iterator last, F f);`<br/>
-`template<typename F>`<br/>
-`  const_iterator visit_while(const_iterator first, const_iterator last, F f) const;`
-
-_Preconditions:_ [`first`, `last`) is a valid range on `*this`. <br/>
-_Effects:_ Equivalent to:
-```cpp
- while(first != last) {
-   if(!f(*first)) return first;
-   else ++first;
- }
- return last;
-```
-(Note: Potentially faster than the sample code due to internal optimizations.)
-
-`template<typename F>`<br/>
-`  void visit_all(F f);`<br/>
-`template<typename F>`<br/>
-`  void visit_all(F f) const;`
-
-_Effects:_ Equivalent to: `visit(begin(), end(), std::ref(f));`
-
-`template<typename F>`<br/>
-`  iterator visit_all_while(F f);`<br/>
-`template<typename F>`<br/>
-`  const_iterator visit_all_while(F f) const;`
-
-_Effects:_ Equivalent to: `return visit_while(begin(), end(), std::ref(f));`
-
 #### Erasure
 
 `template<typename T, typename Allocator, typename U = T>`<br/>
@@ -1606,3 +1562,56 @@ return original_size - c.size();
 ```
 (Note: Potentially faster than the sample code due to internal optimizations.)
 
+<a name="ref-visitation"></a>
+#### Visitation
+
+`template</* implementation-defined-parameters */, typename F>`<br/>
+`  F for_each(/* hub-iterator */ first, /* hub-iterator */ last, F f);`
+
+_Constraints:_ `decltype(first)` is the `iterator` or `const_iterator` of an instantiation of `boost::container::hub`.<br/>
+_Preconditions:_ [`first`, `last`) is a valid range. <br/>
+_Effects:_ Equivalent to:
+```cpp
+while(first != last) f(*first++);
+return f;
+```
+(Note: Potentially faster than the sample code due to internal optimizations.)
+
+`template</* implementation-defined-parameters */, typename F>`<br/>
+`  std::pair</* hub-iterator */, F>`<br/>
+`    for_each_while(/* hub-iterator */ first, /* hub-iterator */ last, F f);`
+
+_Constraints:_ `decltype(first)` is the `iterator` or `const_iterator` of an instantiation of `boost::container::hub`.<br/>
+_Preconditions:_ [`first`, `last`) is a valid range. <br/>
+_Effects:_ Equivalent to:
+```cpp
+ while(first != last && f(*first)) ++first;
+ return {first, std::move(f)};
+```
+(Note: Potentially faster than the sample code due to internal optimizations.)
+
+`template<typename T, typename Allocator, typename F>`<br/>
+`  F for_each(hub<T, Allocator>& x, F f);`<br/>
+`template<typename T, typename Allocator, typename F>`<br/>
+`  F for_each(const hub<T, Allocator>& x, F f);`
+  
+_Effects:_ Equivalent to:
+```cpp
+boost::container::for_each(x.begin(), x.end(), std::ref(f));
+return f;
+```
+
+`template<typename T, typename Allocator, typename F>`<br/>
+`  std::pair<typename hub<T, Allocator>::iterator, F>`<br/>
+`    for_each_while(hub<T, Allocator>& x, F f);`<br/>
+`template<typename T, typename Allocator, typename F>`<br/>
+`  std::pair<typename hub<T, Allocator>::const_iterator, F>`<br/>
+`    for_each_while(const hub<T, Allocator>& x, F f);`
+
+_Effects:_ Equivalent to:
+```cpp
+return {
+  boost::container::for_each_while(x.begin(), x.end(), std::ref(f)).first,
+  std::move(f)
+};
+```
