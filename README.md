@@ -1551,9 +1551,9 @@ _Effects:_ Equivalent to: `return erase_if(x, [&](const auto& elem) -> bool { re
 _Effects:_ Equivalent to:
 ```cpp
 auto s = x.size();
-for (auto i = x.begin(); i != x.end(); ) {
-  if (pred(*i)) i = x.erase(i);
-  else          ++i;
+for(auto i = x.begin(); i != x.end(); ) {
+  if(pred(*i)) i = x.erase(i);
+  else         ++i;
 }
 return s - x.size();
 ```
