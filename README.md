@@ -1534,7 +1534,7 @@ References, pointers, and iterators referring to elements in `*this` may be inva
 _Preconditions:_ `p` points to an element in `*this`. <br/>
 _Returns:_ An `iterator` or `const_iterator` pointing to the same element as `p`. <br/>
 _Throws:_ Nothing. <br/>
-_Complexity:_ Linear in the number of active blocks in _*this_.
+_Complexity:_ Linear in the number of active blocks in `*this`.
 
 #### Erasure
 
@@ -1542,7 +1542,7 @@ _Complexity:_ Linear in the number of active blocks in _*this_.
 `  typename hub<T, Allocator>::size_type`<br/>
 `    erase(hub<T, Allocator>& x, const U& value);`
 
-_Effects:_ Equivalent to: `return erase_if(c, [&](const auto& elem) -> bool { return elem == value; });`
+_Effects:_ Equivalent to: `return erase_if(x, [&](const auto& elem) -> bool { return elem == value; });`
 
 `template<typename T, typename Allocator, typename Predicate>`<br/>
 `  typename hub<T, Allocator>::size_type`<br/>
@@ -1550,15 +1550,12 @@ _Effects:_ Equivalent to: `return erase_if(c, [&](const auto& elem) -> bool { re
 
 _Effects:_ Equivalent to:
 ```cpp
-auto original_size = c.size();
-for (auto i = c.begin(); i != c.end(); ) {
-  if (pred(*i)) {
-    i = c.erase(i);
-  } else {
-    ++i;
-  }
+auto s = x.size();
+for (auto i = x.begin(); i != x.end(); ) {
+  if (pred(*i)) i = x.erase(i);
+  else          ++i;
 }
-return original_size - c.size();
+return s - x.size();
 ```
 (Note: Potentially faster than the sample code due to internal optimizations.)
 
