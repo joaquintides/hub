@@ -1071,13 +1071,14 @@ template<typename T, typename Allocator, typename Predicate>
 
 template</* implementation-defined-parameters */, typename F>
   F for_each(/* hub-iterator */ first, /* hub-iterator */ last, F f);
-template</* implementation-defined-parameters */, typename F>
-  std::pair</* hub-iterator */, F>
-    for_each_while(/* hub-iterator */ first, /* hub-iterator */ last, F f);
 template<typename T, typename Allocator, typename F>
   F for_each(hub<T, Allocator>& x, F f);
 template<typename T, typename Allocator, typename F>
   F for_each(const hub<T, Allocator>& x, F f);
+
+template</* implementation-defined-parameters */, typename F>
+  std::pair</* hub-iterator */, F>
+    for_each_while(/* hub-iterator */ first, /* hub-iterator */ last, F f);
 template<typename T, typename Allocator, typename F>
   std::pair<typename hub<T, Allocator>::iterator, F>
     for_each_while(hub<T, Allocator>& x, F f);
@@ -1574,6 +1575,17 @@ return f;
 ```
 (Note: Potentially faster than the sample code due to internal optimizations.)
 
+`template<typename T, typename Allocator, typename F>`<br/>
+`  F for_each(hub<T, Allocator>& x, F f);`<br/>
+`template<typename T, typename Allocator, typename F>`<br/>
+`  F for_each(const hub<T, Allocator>& x, F f);`
+  
+_Effects:_ Equivalent to:
+```cpp
+boost::container::for_each(x.begin(), x.end(), std::ref(f));
+return f;
+```
+
 `template</* implementation-defined-parameters */, typename F>`<br/>
 `  std::pair</* hub-iterator */, F>`<br/>
 `    for_each_while(/* hub-iterator */ first, /* hub-iterator */ last, F f);`
@@ -1586,17 +1598,6 @@ _Effects:_ Equivalent to:
  return {first, std::move(f)};
 ```
 (Note: Potentially faster than the sample code due to internal optimizations.)
-
-`template<typename T, typename Allocator, typename F>`<br/>
-`  F for_each(hub<T, Allocator>& x, F f);`<br/>
-`template<typename T, typename Allocator, typename F>`<br/>
-`  F for_each(const hub<T, Allocator>& x, F f);`
-  
-_Effects:_ Equivalent to:
-```cpp
-boost::container::for_each(x.begin(), x.end(), std::ref(f));
-return f;
-```
 
 `template<typename T, typename Allocator, typename F>`<br/>
 `  std::pair<typename hub<T, Allocator>::iterator, F>`<br/>
