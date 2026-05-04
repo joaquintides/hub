@@ -127,12 +127,12 @@ template<typename ValuePointer> class iterator;
 
 }
 
+template<typename T, typename Allocator, typename F>
+F for_each(hub<T, Allocator>&, F);
+
 template<typename ValuePtr, typename F>
 std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   hub_detail::iterator<ValuePtr>, hub_detail::iterator<ValuePtr>, F);
-
-template<typename T, typename Allocator, typename F>
-F for_each(hub<T, Allocator>&, F);
 
 #ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
 namespace pmr {
@@ -1853,6 +1853,20 @@ F for_each(
   return f;
 }
 
+template<typename T, typename Allocator, typename F>
+F for_each(hub<T, Allocator>& x, F f)
+{
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
+}
+
+template<typename T, typename Allocator, typename F>
+F for_each(const hub<T, Allocator>& x, F f)
+{
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
+}
+
 template<typename ValuePtr, typename F>
 std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   hub_detail::iterator<ValuePtr> first, hub_detail::iterator<ValuePtr> last,
@@ -1870,20 +1884,6 @@ std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
   }
   for(; first != last; ++first) if(!f(*first)) return {first, std::move(f)};
   return {first, std::move(f)};
-}
-
-template<typename T, typename Allocator, typename F>
-F for_each(hub<T, Allocator>& x, F f)
-{
-  container::for_each(x.begin(), x.end(), std::ref(f));
-  return f;
-}
-
-template<typename T, typename Allocator, typename F>
-F for_each(const hub<T, Allocator>& x, F f)
-{
-  container::for_each(x.begin(), x.end(), std::ref(f));
-  return f;
 }
 
 template<typename T, typename Allocator, typename F>
