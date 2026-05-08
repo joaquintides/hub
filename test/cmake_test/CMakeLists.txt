@@ -11,6 +11,7 @@ project(cmake_subdir_test LANGUAGES CXX)
 if(BOOST_CI_INSTALL_TEST)
     # Workaround until B2 also installs targets for header-only libs
     if(BOOST_CI_INSTALLED_BY STREQUAL "B2")
+        find_package(Boost COMPONENTS headers REQUIRED)
         add_library(boost_hub INTERFACE IMPORTED GLOBAL)
         target_link_libraries(boost_hub INTERFACE Boost::headers)
         add_library(Boost::hub ALIAS boost_hub)
