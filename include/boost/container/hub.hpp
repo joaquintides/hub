@@ -121,6 +121,19 @@ class hub;
 template<typename T, typename Allocator, typename Predicate>
 typename hub<T, Allocator>::size_type erase_if(hub<T, Allocator>&, Predicate);
 
+namespace hub_detail {
+
+template<typename ValuePointer> class iterator;
+
+}
+
+template<typename T, typename Allocator, typename F>
+F for_each(hub<T, Allocator>&, F);
+
+template<typename ValuePtr, typename F>
+std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
+  hub_detail::iterator<ValuePtr>, hub_detail::iterator<ValuePtr>, F);
+
 #ifndef BOOST_NO_CXX17_HDR_MEMORY_RESOURCE
 namespace pmr {
 
@@ -236,9 +249,16 @@ template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
   using super = block_base<pointer_rebind_t<ValuePointer, void>>;
+  using pointer = pointer_rebind_t<ValuePointer, block>;
 
   ValuePointer data() noexcept { return data_; }
   ValuePointer data_;
+
+  static pointer 
+  static_cast_block_pointer(typename super::pointer pbb) noexcept
+  {
+    return pointer_traits<pointer>::pointer_to(static_cast<block&>(*pbb));
+  }
 };
 
 template<typename ValuePointer>
@@ -255,7 +275,7 @@ struct block_list: block<ValuePointer>
   using block_base = typename block::super;
   using block_base_pointer = typename block_base::pointer;
   using const_block_base_pointer = typename block_base::const_pointer;
-  using block_pointer = pointer_rebind_t<ValuePointer, block>;
+  using block_pointer = typename block::pointer;
   using block_base::full;
   using block_base::pointer_to;
   using block_base::prev_available;
@@ -264,13 +284,6 @@ struct block_list: block<ValuePointer>
   using block_base::next;
   using block_base::mask;
   using block::data_;
-
-  static block_pointer 
-  static_cast_block_pointer(block_base_pointer pbb) noexcept
-  {
-    return pointer_traits<block_pointer>::pointer_to(
-      static_cast<block&>(*pbb));
-  }
 
   block_list() 
   { 
@@ -467,6 +480,13 @@ public:
 private:
   template<typename> friend class iterator;
   template<typename, typename> friend class container::hub;
+  template<typename VP, typename F>
+  friend std::pair<hub_detail::iterator<VP>, F> container::for_each_while(
+    hub_detail::iterator<VP>, hub_detail::iterator<VP>, F);
+  template<typename HubIt, typename F>
+  friend HubIt for_each_while_core(
+    typename HubIt::block_base_pointer,typename HubIt::block_base_pointer,
+    F&&);
 
   template<typename T>
   using pointer_rebind_t = hub_detail::pointer_rebind_t<ValuePointer, T>;
@@ -497,6 +517,39 @@ private:
   block_base_pointer pbb = nullptr;
   int                n = 0;
 };
+
+template<typename HubIterator, typename F>
+HubIterator for_each_while_core(
+  typename HubIterator::block_base_pointer pbb,
+  typename HubIterator::block_base_pointer last_pbb, F&& f)
+{
+  using block = typename HubIterator::block;
+
+  BOOST_ASSERT(pbb != last_pbb);
+  auto pb = block::static_cast_block_pointer(pbb);
+  auto mask = pb->mask;
+  auto n = unchecked_countr_zero(mask);
+  auto pd = pb->data();
+  do {
+    pbb = pb->next;
+    auto next_mask = pbb->mask;
+    auto next_n = unchecked_countr_zero(next_mask);
+    auto next_pd = block::static_cast_block_pointer(pbb)->data();
+    BOOST_CONTAINER_HUB_PREFETCH(next_pd + next_n);
+    BOOST_CONTAINER_HUB_PREFETCH(pbb->next);
+    for(; ; ) {
+      if(!f(pd[n])) return {pb, n};
+      mask &= mask - 1;
+      if(!mask) break;
+      n = unchecked_countr_zero(mask);
+    }
+    pb = block::static_cast_block_pointer(pbb);
+    mask = next_mask;
+    n = next_n;
+    pd = next_pd;
+  } while(pb != last_pbb);
+  return {last_pbb};
+}
 
 template<typename T, std::size_t N>
 struct sort_iterator
@@ -1291,74 +1344,6 @@ public:
     return const_cast<hub*>(this)->get_iterator(p);
   }
 
-  template<typename F>
-  void visit(iterator first, iterator last, F f)
-  {
-    visit_while(first, last, [&] (value_type& x) {
-      f(x); 
-      return true;
-    });
-  }
-
-  template<typename F>
-  void visit(const_iterator first, const_iterator last, F f) const
-  {
-    visit_while(first, last, [&] (const value_type& x) {
-      f(x); 
-      return true;
-    });
-  }
-
-  template<typename F>
-  iterator visit_while(iterator first, iterator last, F f)
-  {
-    for(auto pbb = first.pbb; first != last; ) {
-      if(!f(*first)) return first;
-      ++first;
-      if(first.pbb != pbb) break;
-    }
-    if(first.pbb != last.pbb) {
-      first = visit_while_impl(first.pbb, last.pbb, f);
-      if(first.pbb != last.pbb) return first;
-    }
-    for(; first != last; ++first) if(!f(*first)) return first;
-    return first;
-  }
-
-  template<typename F>
-  const_iterator visit_while(
-    const_iterator first, const_iterator last, F f) const
-  {
-    auto it =const_cast<hub*>(this)->visit_while(
-      iterator{first.pbb, first.n}, iterator{last.pbb, last.n},
-      [&] (const value_type& x) { return f(x); });
-    return {it.pbb, it.n};
-  }
-
-  template<typename F>
-  void visit_all(F f) 
-  {
-    visit(begin(), end(), std::ref(f)); 
-  }
-
-  template<typename F>
-  void visit_all(F f) const
-  {
-    visit(begin(), end(), std::ref(f)); 
-  }
-
-  template<typename F>
-  iterator visit_all_while(F f) 
-  {
-    return visit_while(begin(), end(), std::ref(f)); 
-  }
-
-  template<typename F>
-  const_iterator visit_all_while(F f) const
-  {
-    return visit_while(begin(), end(), std::ref(f)); 
-  }
-
 private:
   template<typename U, typename A, typename P>
   friend typename hub<U, A>::size_type erase_if(hub<U, A>&, P);
@@ -1449,7 +1434,7 @@ private:
   static block_pointer 
   static_cast_block_pointer(block_base_pointer pbb) noexcept
   {
-    return block_list::static_cast_block_pointer(pbb);
+    return block::static_cast_block_pointer(pbb);
   }
 
   block_pointer create_new_available_block()
@@ -1639,9 +1624,11 @@ private:
       hub_detail::buffer<T,Allocator> buf(size_, al());
       if(!buf.data) return false;
 
-      visit_all([&] (value_type& x) { buf.emplace_back(std::move(x)); });
+      container::for_each(*this, [&] (value_type& x) {
+        buf.emplace_back(std::move(x));
+      });
       std::sort(buf.begin(), buf.end(), comp);
-      visit_all([&] (value_type& x) { 
+      container::for_each(*this, [&] (value_type& x) { 
         x = std::move(*buf.begin());
         buf.erase_front();
       });
@@ -1666,7 +1653,7 @@ private:
       if(!p) return false;
 
       size_type i = 0;
-      visit_all([&] (value_type& x) {
+      container::for_each(*this, [&] (value_type& x) {
         p[i] = {std::addressof(x), i};
         ++i;
       });
@@ -1791,36 +1778,6 @@ private:
     }
   }
 
-  template<typename F>
-  iterator visit_while_impl(
-    block_base_pointer pbb, block_base_pointer last_pbb, F&& f)
-  {
-    BOOST_ASSERT(pbb != last_pbb);
-    auto pb = static_cast_block_pointer(pbb);
-    auto mask = pb->mask;
-    auto n = hub_detail::unchecked_countr_zero(mask);
-    auto pd = pb->data();
-    do {
-      pbb = pb->next;
-      auto next_mask = pbb->mask;
-      auto next_n = hub_detail::unchecked_countr_zero(next_mask);
-      auto next_pd = static_cast_block_pointer(pbb)->data();
-      BOOST_CONTAINER_HUB_PREFETCH(next_pd + next_n);
-      BOOST_CONTAINER_HUB_PREFETCH(pbb->next);
-      for(; ; ) {
-        if(!f(pd[n])) return {pb, n};
-        mask &= mask - 1;
-        if(!mask) break;
-        n = hub_detail::unchecked_countr_zero(mask);
-      }
-      pb = static_cast_block_pointer(pbb);
-      mask = next_mask;
-      n = next_n;
-      pd = next_pd;
-    } while(pb != last_pbb);
-    return {last_pbb};
-  }
-
   block_list blist;
   size_type  num_blocks = 0;
   size_type  size_ = 0;
@@ -1853,6 +1810,14 @@ void swap(hub<T, Allocator>& x, hub<T, Allocator>& y)
   x.swap(y);
 }
 
+template<typename T, typename Allocator, typename U = T>
+typename hub<T, Allocator>::size_type
+erase(hub<T, Allocator>& x, const U& value)
+{
+  return container::erase_if(
+    x, [&](const T& v) -> bool { return v == value; });
+}
+
 template<typename T, typename Allocator, typename Predicate>
 typename hub<T, Allocator>::size_type
 erase_if(hub<T, Allocator>& x, Predicate pred)
@@ -1876,11 +1841,67 @@ erase_if(hub<T, Allocator>& x, Predicate pred)
   return (size_type)(s - x.size_);
 }
 
-template<typename T, typename Allocator, typename U = T>
-typename hub<T, Allocator>::size_type
-erase(hub<T, Allocator>& x, const U& value)
+template<typename ValuePtr, typename F>
+F for_each(
+  hub_detail::iterator<ValuePtr> first, hub_detail::iterator<ValuePtr> last,
+  F f)
 {
-  return erase_if(x, [&](const T& v) -> bool { return v == value; });
+  using reference = typename hub_detail::iterator<ValuePtr>::reference;
+
+  container::for_each_while(
+    first, last, [&] (reference x) { f(x); return true; });
+  return f;
+}
+
+template<typename T, typename Allocator, typename F>
+F for_each(hub<T, Allocator>& x, F f)
+{
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
+}
+
+template<typename T, typename Allocator, typename F>
+F for_each(const hub<T, Allocator>& x, F f)
+{
+  container::for_each(x.begin(), x.end(), std::ref(f));
+  return f;
+}
+
+template<typename ValuePtr, typename F>
+std::pair<hub_detail::iterator<ValuePtr>, F> for_each_while(
+  hub_detail::iterator<ValuePtr> first, hub_detail::iterator<ValuePtr> last,
+  F f)
+{
+  for(auto pbb = first.pbb; first != last; ) {
+    if(!f(*first)) return {first, std::move(f)};
+    ++first;
+    if(first.pbb != pbb) break;
+  }
+  if(first.pbb != last.pbb) {
+    first = hub_detail::for_each_while_core<hub_detail::iterator<ValuePtr>>(
+      first.pbb, last.pbb, f);
+    if(first.pbb != last.pbb) return {first, std::move(f)};
+  }
+  for(; first != last; ++first) if(!f(*first)) return {first, std::move(f)};
+  return {first, std::move(f)};
+}
+
+template<typename T, typename Allocator, typename F>
+std::pair<typename hub<T, Allocator>::iterator, F>
+for_each_while(hub<T, Allocator>& x, F f)
+{
+  return {
+    container::for_each_while(x.begin(), x.end(), std::ref(f)).first, 
+    std::move(f)};
+}
+
+template<typename T, typename Allocator, typename F>
+std::pair<typename hub<T, Allocator>::const_iterator, F>
+for_each_while(const hub<T, Allocator>& x, F f)
+{
+  return {
+    container::for_each_while(x.begin(), x.end(), std::ref(f)).first,
+    std::move(f)};
 }
 
 } /* namespace container */

@@ -579,6 +579,8 @@ void test(const typename Hub::allocator_type& al = {})
     }
   }
 
+  test_global_erase<Hub>(rng, al);
+
   /* visitation */
 
   {
@@ -597,10 +599,12 @@ void test(const typename Hub::allocator_type& al = {})
            clast = std::prev(x.cend(), (int)i);
 
       res = 0;
-      x.visit(first, last, f);
+      decltype(f) ret1 = boost::container::for_each(first, last, f);
+      (void)ret1;
       auto res1 = res;
       res = 0;
-      cx.visit(cfirst, clast, cf);
+      decltype(cf) ret2 = boost::container::for_each(cfirst, clast, cf);
+      (void)ret2;
       auto res2 = res;
       res = 0;
       std::for_each(first, last, f);
@@ -610,10 +614,12 @@ void test(const typename Hub::allocator_type& al = {})
     }
 
     res = 0;
-    x.visit_all(f);
+    decltype(f) ret1 = for_each(x, f); 
+    (void)ret1;
     auto res1 = res;
     res = 0;
-    cx.visit_all(cf);
+    decltype(cf) ret2 = for_each(cx, cf);
+    (void)ret2;
     auto res2 = res;
     res = 0;
     std::for_each(x.begin(), x.end(), f);
@@ -645,11 +651,15 @@ void test(const typename Hub::allocator_type& al = {})
 
       res = 0;
       n = (std::size_t)std::distance(first, x.end()) / 2;
-      auto it1 = x.visit_while(first, x.end(), f);
+      std::pair<iterator, decltype(f)> ret1 =
+        boost::container::for_each_while(first, x.end(), f);
+      auto it1 = ret1.first;
       auto res1 = res;
       res = 0;
       n = (std::size_t)std::distance(first, x.end()) / 2;
-      auto it2 = cx.visit_while(cfirst, cx.end(), cf);
+      std::pair<const_iterator, decltype(cf)> ret2 =
+        boost::container::for_each_while(cfirst, cx.end(), cf);
+      auto it2 = ret2.first;
       auto res2 = res;
       res = 0;
       n = (std::size_t)std::distance(first, x.end()) / 2;
@@ -663,11 +673,13 @@ void test(const typename Hub::allocator_type& al = {})
 
     res = 0;
     n = x.size();
-    auto it1 = x.visit_all_while(f);
+    std::pair<iterator, decltype(f)> ret1 = for_each_while(x, f);
+    auto it1 = ret1.first;
     auto res1 = res;
     res = 0;
     n = x.size();
-    auto it2 = cx.visit_all_while(cf);
+    std::pair<const_iterator, decltype(cf)> ret2 = for_each_while(cx, cf);
+    auto it2 = ret2.first;
     auto res2 = res;
     res = 0;
     n = x.size();
@@ -678,8 +690,6 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST(it2 == it3);
     BOOST_TEST_EQ(res2, res3);
   }
-
-  test_global_erase<Hub>(rng, al);
 }
 
 template<template<typename...> class Hub>
