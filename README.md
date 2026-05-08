@@ -13,7 +13,7 @@ the current reference implementation of this standard container.
   * [Unordered insertion](#unordered-insertion)
   * [Capacity](#capacity)
   * [`std::hive` operations](#stdhive-operations)
-  * [Internal visitation](#internal-visitation)
+  * [Visitation](#visitation)
   * [Debugging](#debugging)
     * [Visual Studio Natvis](#visual-studio-natvis)
     * [GDB Pretty-Printer](#gdb-pretty-printer)
@@ -198,7 +198,7 @@ to save memory (`hub` iterators typically are 16 bytes in size). Note, however,
 that `get_iterator` is not cheap: execution is linear on the number of
 non-empty blocks.
 
-### Internal visitation
+### Visitation
 
 The following, typical processing loop:
 
@@ -210,15 +210,17 @@ for(auto& x: h) x *= 2;
 
 Can also be written as:
 ```cpp
-h.visit_all([](auto& x) { x *= 2; });
+// Note this is _not_ std::for_each
+for_each(h, [](auto& x) { x *= 2; });
 ```
 
-Although functionally equivalent to the classical loop, `visit_all` is generally
+Although functionally equivalent to the classical loop, `for_each` is generally
 faster as it is implemented with a combination of loop unrolling and prefetching
 techniques. Speedups can be as high as 1.75x. Consult the [performance](#performance)
 section for a comparison of execution speeds. Consult the
-[reference](#ref-internal-visitation) for documentation on variations of
-`visit_all` (`visit`, `visit_while`, `visit_all_while`).
+[reference](#ref-visitation) for documentation on variations of
+`for_each` (`for_each(first, last, f)`, `for_each_while(h, f)`,
+`for_each_while(first, last, f`).
 
 ### Debugging
 #### Visual Studio Natvis
