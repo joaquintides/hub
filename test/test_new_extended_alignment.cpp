@@ -74,8 +74,8 @@ using new_extended_alignment_hub = boost::container::hub<
 /* The only internal sort function of hub<T> that allocates auxiliary memory
  * for T is transfer_sort: this function, however, is never called when T has
  * new-extended alignment because in this case sizeof(T) exceeds the limit from
- * which other sort functions are used.
- * For completeness, we test transfer_sort even in this impossible situation by
+ * which other sort functions are selected.
+ * For robustness, we test transfer_sort even in this impossible situation by
  * illegally forcing its use through the famous http://www.gotw.ca/gotw/076.htm
  * trick.
  */

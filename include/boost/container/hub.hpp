@@ -682,9 +682,9 @@ struct sort_iterator
 template<typename T, typename Allocator>
 struct buffer
 {
-  buffer(std::size_t n, Allocator al_): al{al_} 
+  buffer(std::size_t n, Allocator al_) noexcept: al{al_} 
   {
-    data = static_cast<T*>(::operator new[](n * sizeof(T), std::nothrow));
+    allocate_data(n);
     if(data) capacity = n;
   }
 
@@ -692,7 +692,7 @@ struct buffer
   {
     if(data) {
       for(; begin_ != end_; ++begin_) allocator_destroy(al, begin());
-      ::operator delete[](data);
+      deallocate_data();
     }
   }
   
@@ -713,11 +713,48 @@ struct buffer
     allocator_destroy(al, begin());
     ++begin_;
   }
-  
+ 
   Allocator   al;
   std::size_t begin_ = 0, end_ = 0;
   std::size_t capacity = 0;
   T*          data = nullptr;
+
+private:
+#if defined(__cpp_aligned_new) && __cpp_aligned_new >= 201606L
+  using aligned_new_required = std::integral_constant<
+    bool, (alignof(T) > __STDCPP_DEFAULT_NEW_ALIGNMENT__)>;
+
+  void allocate_data(std::size_t n)
+  {
+    data = static_cast<T*>(allocate(n * sizeof(T), aligned_new_required{}));
+  }
+
+  static void* allocate(std::size_t m, std::false_type)
+  {
+    return ::operator new[](m, std::nothrow);
+  }
+
+  static void* allocate(std::size_t m, std::true_type)
+  {
+    return ::operator new[](m, std::align_val_t{alignof(T)}, std::nothrow);
+  }
+
+  void deallocate_data() { deallocate(data, aligned_new_required{}); }
+
+  static void deallocate(void* p, std::false_type) { ::operator delete[](p); }
+
+  static void deallocate(void* p, std::true_type) 
+  {
+    ::operator delete[](p, std::align_val_t{alignof(T)}); 
+  }
+#else
+  void allocate_data(std::size_t n)
+  {
+    data = static_cast<T*>(::operator new[](n * sizeof(T), std::nothrow));
+  }
+
+  void deallocate_data() { ::operator delete[](data); }
+#endif
 };
 
 template<typename T>
