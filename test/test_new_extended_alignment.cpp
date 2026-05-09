@@ -13,7 +13,7 @@ int main()
 {
 }
 #else
-
+#include <boost/config.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <cstdint>
@@ -43,6 +43,11 @@ struct aligned_new_allocator
   bool operator!=(const aligned_new_allocator&) const { return false; }
 };
 
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4324) /* structure padded due to alignment specifier */
+#endif
+
 struct alignas(__STDCPP_DEFAULT_NEW_ALIGNMENT__ * 2)
 new_extended_aligned_object
 {
@@ -66,6 +71,10 @@ new_extended_aligned_object
 
   int n;
 };
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4324 */
+#endif
 
 using new_extended_alignment_hub = boost::container::hub<
   new_extended_aligned_object,
