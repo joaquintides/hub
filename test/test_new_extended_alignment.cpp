@@ -50,6 +50,9 @@ new_extended_aligned_object
   new_extended_aligned_object(const new_extended_aligned_object& x):
     n{x.n} { check_alignment(); }
 
+  new_extended_aligned_object& operator=(const new_extended_aligned_object&)
+    = default;
+
   void check_alignment()
   {
     constexpr auto mask =
