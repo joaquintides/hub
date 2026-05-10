@@ -127,6 +127,16 @@ struct make_bigger: Class
 int         throwing_allocator_countdown = 0;
 std::size_t throwing_allocator_outstanding_allocations = 0;
 
+struct throwing_allocator_no_leaks_guard
+{
+  ~throwing_allocator_no_leaks_guard()
+  {  
+    BOOST_TEST_EQ(throwing_allocator_outstanding_allocations, n);
+  }
+
+  std::size_t n;
+};
+
 template<typename T>
 struct throwing_allocator
 {
@@ -154,16 +164,7 @@ struct throwing_allocator
 
   static void countdown_to_throw(int n) { throwing_allocator_countdown = n; }
 
-  static struct no_leaks_guard
-  {
-    ~no_leaks_guard()
-    {  
-      BOOST_TEST_EQ(throwing_allocator_outstanding_allocations, n);
-    }
-
-    std::size_t n;
-  }
-  check_no_leaks_on_exit() 
+  static throwing_allocator_no_leaks_guard check_no_leaks_on_exit()
   {
     return {throwing_allocator_outstanding_allocations};
   }
