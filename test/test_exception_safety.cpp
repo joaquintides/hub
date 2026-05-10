@@ -195,8 +195,7 @@ int main()
     return h;
   }());
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "Non copy/move ctors, value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "Non copy/move ctors, value_type throws\n";
   {
     auto guard = allocator_type::check_no_leaks_on_exit();
     
@@ -260,8 +259,7 @@ int main()
   /* TODO: copy/move ctors */
   /* TODO: operator= */
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "assign[_range], value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "assign[_range], value_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -286,8 +284,7 @@ int main()
       });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "assign[_range], allocator_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "assign[_range], allocator_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -331,8 +328,7 @@ int main()
       });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "reserve, allocator_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "reserve, allocator_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -348,8 +344,7 @@ int main()
       });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "shrink_to_fit, value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "shrink_to_fit, value_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -362,8 +357,7 @@ int main()
     });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "emplace/insert, value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "emplace/insert, value_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -383,7 +377,8 @@ int main()
       },
       [&h] {
         value_type::countdown_to_throw(2);
-        h.insert(std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(std::move(x));
       },
       [&h] {
         value_type::countdown_to_throw(2);
@@ -393,7 +388,8 @@ int main()
     test_basic_exception_safety(h,
       [&h] {
         value_type::countdown_to_throw(2);
-        h.insert(h.begin(), std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(h.begin(), std::move(x));
       },
       [&h] {
         std::initializer_list<value_type> il = {0, 1, 2};
@@ -418,8 +414,7 @@ int main()
       });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "emplace/insert, allocator_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "emplace/insert, allocator_type throws\n";
   for(const auto& ch: hubs) {
     auto guard = allocator_type::check_no_leaks_on_exit();
     auto h = ch;
@@ -452,11 +447,13 @@ int main()
       },
       [&h] {
         allocator_type::countdown_to_throw(1);
-        h.insert(std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(std::move(x));
       },
       [&h] {
         allocator_type::countdown_to_throw(2);
-        h.insert(std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(std::move(x));
       },
       [&h] {
         allocator_type::countdown_to_throw(1);
@@ -468,11 +465,13 @@ int main()
       },
       [&h] {
         allocator_type::countdown_to_throw(1);
-        h.insert(h.begin(), std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(h.begin(), std::move(x));
       },
       [&h] {
         allocator_type::countdown_to_throw(2);
-        h.insert(h.begin(), std::move(value_type{3}));
+        auto x = value_type{3};
+        h.insert(h.begin(), std::move(x));
       });
 
     test_basic_exception_safety(h,
@@ -518,8 +517,7 @@ int main()
       });
   }
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "sort, value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "sort, value_type throws\n";
   for(const auto& ch: hubs) {
     if(std::is_sorted(ch.begin(), ch.end())) continue;
     auto guard = allocator_type::check_no_leaks_on_exit();
