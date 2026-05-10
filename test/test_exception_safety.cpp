@@ -1,0 +1,558 @@
+/* Copyright 2026 Joaquin M Lopez Munoz.
+ * Distributed under the Boost Software License, Version 1.0.
+ * (See accompanying file LICENSE_1_0.txt or copy at
+ * http://www.boost.org/LICENSE_1_0.txt)
+ */
+
+#include <algorithm>
+#include <boost/container/hub.hpp>
+#include <boost/core/lightweight_test.hpp>
+#include <climits>
+#include <iterator>
+#include <new>
+#include <stdexcept>
+#include <vector>
+#include "utility.hpp"
+
+template<typename T, typename Allocator>
+void check_valid(const boost::container::hub<T, Allocator>& h)
+{
+  BOOST_TEST_GE(h.capacity(), h.size());
+  BOOST_TEST_EQ((std::size_t)std::distance(h.begin(), h.end()), h.size());
+  for(const auto& x: h) check_valid(x);
+}
+
+template<typename Container1, typename Container2>
+void check_equal(const Container1& x, const Container2& y)
+{
+  auto first1 = x.begin(), last1 = x.end();
+  auto first2 = y.begin(), last2 = y.end();
+  while(first1 != last1 && first2 != last2) {
+    BOOST_TEST(*first1++ == *first2++);
+  }
+  BOOST_TEST(first1 == last1);
+  BOOST_TEST(first2 == last2);
+}
+
+template<typename T, typename Allocator>
+void fill_till_capacity(boost::container::hub<T, Allocator>& h)
+{
+  using value_type = typename boost::container::hub<T, Allocator>::value_type;
+
+  while(h.size() < h.capacity()) h.insert(value_type{0});
+}
+
+template<typename Hub, typename F>
+void test_basic_exception_safety(Hub& h, F f)
+{
+  try {
+    f();
+    BOOST_ERROR("Expected exception was not thrown");
+  }
+  catch(...) {
+    check_valid(h);
+  }
+}
+
+template<typename Hub, typename F, typename... Fs>
+void test_basic_exception_safety(Hub& h, F f, Fs... fs)
+{
+  test_basic_exception_safety(h, f);
+  test_basic_exception_safety(h, fs...);
+}
+
+template<typename Hub, typename F>
+void test_strong_exception_safety(Hub& h, F f)
+{
+  std::vector<int> backup{h.begin(), h.end()};
+  try { 
+    f(); 
+    BOOST_ERROR("Expected exception was not thrown");
+  }
+  catch(...) {
+    check_valid(h);
+    check_equal(h, backup);
+  }
+}
+
+template<typename Hub, typename F, typename... Fs>
+void test_strong_exception_safety(Hub& h, F f, Fs... fs)
+{
+  test_strong_exception_safety(h, f);
+  test_strong_exception_safety(h, fs...);
+}
+
+struct throwing_int
+{
+  throwing_int(int n_ = 0) { maybe_throw(); n = n_; }
+  throwing_int(const throwing_int& x) { maybe_throw(); n = x.n; }
+  throwing_int& operator=(const throwing_int& x)
+    { maybe_throw(); n = x.n; return *this; }
+  ~throwing_int() { n = INT_MIN; }
+
+  throwing_int& operator+=(int m) { n += m; return *this; }
+
+  operator int() const { return n; }
+  bool operator==(int n_) const { return n == n_; }
+  bool operator<(int n_) const { return n < n_; }
+
+  static void countdown_to_throw(int n) { countdown = n; }
+
+private:
+  static int countdown;
+
+  static void maybe_throw() 
+  { 
+    if(countdown && !--countdown) throw std::runtime_error("injected throw");
+  }
+
+  friend void check_valid(const throwing_int& x) 
+  {
+    BOOST_TEST_NE(x.n, INT_MIN);
+  }
+
+  int n = INT_MIN;
+};
+
+int throwing_int::countdown = 0;
+
+template<typename Class, std::size_t ExtraSpace>
+struct make_bigger: Class
+{
+  make_bigger(const Class& x): Class{x} {}
+
+  unsigned char extra_space[ExtraSpace] = {};
+};
+
+int         throwing_allocator_countdown = 0;
+std::size_t throwing_allocator_outstanding_allocations = 0;
+
+template<typename T>
+struct throwing_allocator
+{
+  using value_type = T;
+
+  throwing_allocator() = default;
+  template<typename U> throwing_allocator(const throwing_allocator<U>&) {}
+
+  T* allocate(std::size_t n)
+  {
+    maybe_throw();
+    auto p = static_cast<T*>(::operator new(n * sizeof(T)));
+    ++throwing_allocator_outstanding_allocations;
+    return p;
+  }
+
+  void deallocate(T* p, std::size_t)
+  { 
+    --throwing_allocator_outstanding_allocations;
+    ::operator delete(p);
+  }
+
+  bool operator==(const throwing_allocator&) const { return true; }
+  bool operator!=(const throwing_allocator&) const { return false; }
+
+  static void countdown_to_throw(int n) { throwing_allocator_countdown = n; }
+
+  static struct no_leaks_guard
+  {
+    ~no_leaks_guard()
+    {  
+      BOOST_TEST_EQ(throwing_allocator_outstanding_allocations, n);
+    }
+
+    std::size_t n;
+  }
+  check_no_leaks_on_exit() 
+  {
+    return {throwing_allocator_outstanding_allocations};
+  }
+
+private:
+  static void maybe_throw() 
+  { 
+    if(throwing_allocator_countdown && !--throwing_allocator_countdown) {
+      throw std::runtime_error("injected throw");
+    }
+  }
+};
+
+int main()
+{
+  using value_type = throwing_int;
+  using allocator_type = throwing_allocator<value_type>;
+  using hub = boost::container::hub<value_type, allocator_type>;
+
+  std::vector<hub> hubs;
+  hubs.emplace_back();
+  hubs.emplace_back(hub{0, 2, 1});
+  hubs.emplace_back(hub{64, 5});
+  hubs.emplace_back([] {
+    hub h;
+    for(int i = 0; i < 1000; ++i) h.insert(-i);
+    puncture(h);
+    return h;
+  }());
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "Non copy/move ctors, value_type throws\n";
+  {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    
+    value_type::countdown_to_throw(100);
+    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+
+    value_type::countdown_to_throw(100);
+    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+
+    auto rng = make_range<value_type>(200);
+    value_type::countdown_to_throw(100);
+    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+    value_type::countdown_to_throw(100);
+    BOOST_TEST_THROWS(
+      (void)hub(boost::container::from_range, rng), std::runtime_error);
+#endif
+
+    std::initializer_list<value_type> il = {0, 1, 2, 3};
+    value_type::countdown_to_throw(2);
+    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "Non copy/move ctors, allocator_type throws\n";
+  {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    
+    allocator_type::countdown_to_throw(3);
+    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+    allocator_type::countdown_to_throw(4);
+    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+
+    allocator_type::countdown_to_throw(3);
+    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+    allocator_type::countdown_to_throw(4);
+    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+
+    auto rng = make_range<value_type>(200);
+    allocator_type::countdown_to_throw(3);
+    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+    allocator_type::countdown_to_throw(4);
+    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+    allocator_type::countdown_to_throw(3);
+    BOOST_TEST_THROWS(
+      (void)hub(boost::container::from_range, rng), std::runtime_error);
+    allocator_type::countdown_to_throw(4);
+    BOOST_TEST_THROWS(
+      (void)hub(boost::container::from_range, rng), std::runtime_error);
+#endif
+
+    std::initializer_list<value_type> il = {0, 1, 2, 3};
+    allocator_type::countdown_to_throw(1);
+    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+    allocator_type::countdown_to_throw(2);
+    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+  }
+  /* TODO: copy/move ctors */
+  /* TODO: operator= */
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "assign[_range], value_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+
+    test_basic_exception_safety(h,
+      [&h] {
+        auto rng = make_range<value_type>(200);
+        value_type::countdown_to_throw(100);
+        h.assign(rng.begin(), rng.end());
+      },
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+      [&h] {
+        auto rng = make_range<value_type>(200);
+        value_type::countdown_to_throw(100);
+        h.assign_range(rng);
+      },
+#endif
+      [&h] {
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        value_type::countdown_to_throw(2);
+        h.assign(il);
+      });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "assign[_range], allocator_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+
+    test_basic_exception_safety(h,
+      [&h] {
+        auto rng = make_range<value_type>(h.capacity() + 200);
+        allocator_type::countdown_to_throw(3);
+        h.assign(rng.begin(), rng.end());
+      },
+      [&h] {
+        auto rng = make_range<value_type>(h.capacity() + 200);
+        allocator_type::countdown_to_throw(4);
+        h.assign(rng.begin(), rng.end());
+      },
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+      [&h] {
+        auto rng = make_range<value_type>(h.capacity() + 200);
+        allocator_type::countdown_to_throw(3);
+        h.assign_range(rng);
+      },
+      [&h] {
+        auto rng = make_range<value_type>(h.capacity() + 200);
+        allocator_type::countdown_to_throw(4);
+        h.assign_range(rng);
+      },
+#endif
+      [&h] {
+        h.clear();
+        h.shrink_to_fit();
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        allocator_type::countdown_to_throw(1);
+        h.assign(il);
+      },
+      [&h] {
+        h.clear();
+        h.shrink_to_fit();
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        allocator_type::countdown_to_throw(2);
+        h.assign(il);
+      });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "reserve, allocator_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+
+    test_basic_exception_safety(h,
+      [&h] {
+        allocator_type::countdown_to_throw(3);
+        h.reserve(h.capacity() + 200);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(4);
+        h.reserve(h.capacity() + 200);
+      });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "shrink_to_fit, value_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+
+    test_basic_exception_safety(h, [&h] {
+      value_type::countdown_to_throw(10);
+      h.shrink_to_fit(); /* may not throw depending on h */
+      value_type::countdown_to_throw(0);
+      throw std::runtime_error("shrink_to_fit didn't throw");
+    });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "emplace/insert, value_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+
+    test_strong_exception_safety(h,
+      [&h] {
+        value_type::countdown_to_throw(1);
+        h.emplace(3);
+      },
+      [&h] {
+        value_type::countdown_to_throw(1);
+        h.emplace_hint(h.end(), 3);
+      },
+      [&h] {
+        value_type::countdown_to_throw(2);
+        h.insert(3);
+      },
+      [&h] {
+        value_type::countdown_to_throw(2);
+        h.insert(std::move(value_type{3}));
+      },
+      [&h] {
+        value_type::countdown_to_throw(2);
+        h.insert(h.begin(), 3);
+      });
+
+    test_basic_exception_safety(h,
+      [&h] {
+        value_type::countdown_to_throw(2);
+        h.insert(h.begin(), std::move(value_type{3}));
+      },
+      [&h] {
+        std::initializer_list<value_type> il = {0, 1, 2};
+        value_type::countdown_to_throw(2);
+        h.insert(il);
+      },
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        value_type::countdown_to_throw(2);
+        h.insert_range(v);
+      },
+#endif
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        value_type::countdown_to_throw(2);
+        h.insert(v.begin(), v.end());
+      },
+      [&h] {
+        value_type::countdown_to_throw(50);
+        h.insert(100, value_type{42});
+      });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "emplace/insert, allocator_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto h = ch;
+    fill_till_capacity(h);
+
+    test_strong_exception_safety(h,
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.emplace(3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.emplace(3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.emplace_hint(h.end(), 3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.emplace_hint(h.end(), 3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.insert(3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.insert(3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.insert(std::move(value_type{3}));
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.insert(std::move(value_type{3}));
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.insert(h.begin(), 3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.insert(h.begin(), 3);
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(1);
+        h.insert(h.begin(), std::move(value_type{3}));
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(2);
+        h.insert(h.begin(), std::move(value_type{3}));
+      });
+
+    test_basic_exception_safety(h,
+      [&h] {
+        std::initializer_list<value_type> il = {0, 1, 2};
+        allocator_type::countdown_to_throw(1);
+        h.insert(il);
+      },
+      [&h] {
+        std::initializer_list<value_type> il = {0, 1, 2};
+        allocator_type::countdown_to_throw(2);
+        h.insert(il);
+      },
+#if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        allocator_type::countdown_to_throw(1);
+        h.insert_range(v);
+      },
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        allocator_type::countdown_to_throw(2);
+        h.insert_range(v);
+      },
+#endif
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        allocator_type::countdown_to_throw(1);
+        h.insert(v.begin(), v.end());
+      },
+      [&h] {
+        std::vector<value_type> v = {0, 1, 2};
+        allocator_type::countdown_to_throw(2);
+        h.insert(v.begin(), v.end());
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(3);
+        h.insert(100, value_type{42});
+      },
+      [&h] {
+        allocator_type::countdown_to_throw(4);
+        h.insert(100, value_type{42});
+      });
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "sort, value_type throws\n";
+  for(const auto& ch: hubs) {
+    if(std::is_sorted(ch.begin(), ch.end())) continue;
+    auto guard = allocator_type::check_no_leaks_on_exit();
+
+    /* transfer_sort */
+    auto h0 = ch;
+    test_basic_exception_safety(h0,
+      [&h0] {
+        value_type::countdown_to_throw((int)(h0.size()/2));
+        h0.sort();
+      });
+
+    /* proxy_sort */
+    using bigger_element_hub = 
+      boost::container::hub<make_bigger<value_type, 128>>;
+     
+    bigger_element_hub h1{ch.begin(), ch.end()};
+    test_basic_exception_safety(h1,
+      [&h1] {
+        value_type::countdown_to_throw(1);
+        h1.sort();
+      });
+
+    /* compact_sort */
+    bigger_element_hub h2;
+    while(h2.size() < 2 * 1024 * 1024 / sizeof(void*)) {
+      h2.insert(ch.begin(), ch.end());
+    }
+    test_basic_exception_safety(h2,
+      [&h2] {
+        value_type::countdown_to_throw((int)(h2.size() / 2));
+        h2.sort();
+      });
+  }
+
+  return boost::report_errors();
+}
