@@ -1587,23 +1587,28 @@ private:
   template<typename... Args>
   iterator grow_and_emplace(Args&&... args)
   {
-    auto pb = create_new_available_block();
-    BOOST_TRY{
+    auto pb = allocator_allocate(al(), 1);
+    BOOST_TRY {
+      allocator_rebind_t<Allocator, value_type> val(al());
+      pb->data_ = allocator_allocate(val, N);
+      pb->mask = 1;
       allocator_construct(
         al(), boost::to_address(pb->data()), std::forward<Args>(args)...);
+      blist.link_available_at_back(pb);
+      blist.link_at_back(pb);
+      ++num_blocks;
+      ++size_;
+      return {pb, 0};
     }
     BOOST_CATCH(...) {
-      /* strong exception safety -> capacity restored */
-      blist.unlink_available(pb);
-      delete_block(pb);
-      --num_blocks;
-      BOOST_RETHROW
+      if(pb->mask == 1) { /* exception was thrown from allocator_construct */
+        allocator_rebind_t<Allocator, value_type> val(al());
+        allocator_deallocate(val, pb->data(), N);
+      }
+      allocator_deallocate(al(), pb, 1);
+      BOOST_RETHROW;
     }
     BOOST_CATCH_END
-    pb->mask = 1;
-    blist.link_at_back(pb);
-    ++size_;
-    return {pb, 0};
   }
 
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
