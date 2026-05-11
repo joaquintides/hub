@@ -1156,9 +1156,9 @@ public:
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
-         blist.unlink_available(pb);
-         delete_block(pb);
-         --num_blocks;
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
       }
     }
   }
@@ -1166,10 +1166,23 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
+    auto nb = num_blocks;
     int  n;
     auto pb = retrieve_available_block(n);
-    allocator_construct(
-      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    BOOST_TRY{
+      allocator_construct(
+        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    }
+    BOOST_CATCH(...) {
+      if(num_blocks != nb) {
+        /* strong exception safety -> capacity restored */
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
+      }
+      BOOST_RETHROW
+    }
+    BOOST_CATCH_END
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */

@@ -64,6 +64,7 @@ void test_basic_exception_safety(Hub& h, F f, Fs... fs)
 template<typename Hub, typename F>
 void test_strong_exception_safety(Hub& h, F f)
 {
+  auto c = h.capacity();
   std::vector<int> backup{h.begin(), h.end()};
   try { 
     f(); 
@@ -71,6 +72,7 @@ void test_strong_exception_safety(Hub& h, F f)
   }
   catch(...) {
     check_valid(h);
+    BOOST_TEST_EQ(c, h.capacity());
     check_equal(h, backup);
   }
 }
@@ -187,7 +189,7 @@ int main()
   std::vector<hub> hubs;
   hubs.emplace_back();
   hubs.emplace_back(hub{0, 2, 1});
-  hubs.emplace_back(hub{64, 5});
+  hubs.emplace_back(hub{64, 5}); /* capacity() - size() == 0 */
   hubs.emplace_back([] {
     hub h;
     for(int i = 0; i < 1000; ++i) h.insert(-i);
@@ -256,6 +258,7 @@ int main()
     allocator_type::countdown_to_throw(2);
     BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
   }
+
   /* TODO: copy/move ctors */
   /* TODO: operator= */
 
