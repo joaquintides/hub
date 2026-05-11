@@ -1166,23 +1166,13 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
-    auto nb = num_blocks;
-    int  n;
-    auto pb = retrieve_available_block(n);
-    BOOST_TRY{
-      allocator_construct(
-        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    auto pb = static_cast_block_pointer(blist.next_available);
+    if(BOOST_UNLIKELY(pb == blist.header())) {
+      return grow_and_emplace(std::forward<Args>(args)...);
     }
-    BOOST_CATCH(...) {
-      if(num_blocks != nb) {
-        /* strong exception safety -> capacity restored */
-        blist.unlink_available(pb);
-        delete_block(pb);
-        --num_blocks;
-      }
-      BOOST_RETHROW
-    }
-    BOOST_CATCH_END
+    auto n = hub_detail::unchecked_countr_one(pb->mask);
+    allocator_construct(
+      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
@@ -1514,7 +1504,7 @@ private:
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
-    if(BOOST_LIKELY(blist.next_available != blist.header())){
+    if(BOOST_LIKELY(blist.next_available != blist.header())) {
       auto pb = static_cast_block_pointer(blist.next_available);
       n = hub_detail::unchecked_countr_one(pb->mask);
       return pb;
@@ -1592,6 +1582,28 @@ private:
     blist.reset();
     num_blocks = 0;
     size_ = 0;
+  }
+
+  template<typename... Args>
+  iterator grow_and_emplace(Args&&... args)
+  {
+    auto pb = create_new_available_block();
+    BOOST_TRY{
+      allocator_construct(
+        al(), boost::to_address(pb->data()), std::forward<Args>(args)...);
+    }
+    BOOST_CATCH(...) {
+      /* strong exception safety -> capacity restored */
+      blist.unlink_available(pb);
+      delete_block(pb);
+      --num_blocks;
+      BOOST_RETHROW
+    }
+    BOOST_CATCH_END
+    pb->mask = 1;
+    blist.link_at_back(pb);
+    ++size_;
+    return {pb, 0};
   }
 
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept

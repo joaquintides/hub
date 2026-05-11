@@ -72,7 +72,7 @@ void test_strong_exception_safety(Hub& h, F f)
   }
   catch(...) {
     check_valid(h);
-    BOOST_TEST_EQ(c, h.capacity());
+    BOOST_TEST_EQ(h.capacity(), c);
     check_equal(h, backup);
   }
 }
