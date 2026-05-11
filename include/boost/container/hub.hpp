@@ -1590,10 +1590,11 @@ private:
     auto pb = allocator_allocate(al(), 1);
     BOOST_TRY {
       allocator_rebind_t<Allocator, value_type> val(al());
+      pb->data_ = nullptr;
       pb->data_ = allocator_allocate(val, N);
-      pb->mask = 1;
       allocator_construct(
         al(), boost::to_address(pb->data()), std::forward<Args>(args)...);
+      pb->mask = 1;
       blist.link_available_at_back(pb);
       blist.link_at_back(pb);
       ++num_blocks;
@@ -1601,7 +1602,7 @@ private:
       return {pb, 0};
     }
     BOOST_CATCH(...) {
-      if(pb->mask == 1) { /* exception was thrown from allocator_construct */
+      if(pb->data() != nullptr) {
         allocator_rebind_t<Allocator, value_type> val(al());
         allocator_deallocate(val, pb->data(), N);
       }
