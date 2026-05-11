@@ -1167,12 +1167,34 @@ public:
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
     auto pb = static_cast_block_pointer(blist.next_available);
-    if(BOOST_UNLIKELY(pb == blist.header())) {
-      return grow_and_emplace(std::forward<Args>(args)...);
+    int  n;
+    auto allocation_needed = (pb == blist.header());
+    BOOST_TRY {
+      if(BOOST_UNLIKELY(allocation_needed)) {
+        uncaught_create_new_available_block(pb);
+        n = 0;  
+      }
+      else {
+        n = hub_detail::unchecked_countr_one(pb->mask);
+      }
+      allocator_construct(
+        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
     }
-    auto n = hub_detail::unchecked_countr_one(pb->mask);
-    allocator_construct(
-      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    BOOST_CATCH(...) {
+      if(allocation_needed) {
+        if(pb != nullptr) {
+          if(pb->data() != nullptr) {
+            blist.unlink_available(pb);
+            --num_blocks;
+            allocator_rebind_t<Allocator, value_type> val(al());
+            allocator_deallocate(val, pb->data(), N);
+          }
+          allocator_deallocate(al(), pb, 1);
+        }
+      }
+      BOOST_RETHROW;
+    }
+    BOOST_CATCH_END
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
@@ -1495,6 +1517,18 @@ private:
     return pb;
   }
 
+  void uncaught_create_new_available_block(block_pointer& pb)
+  {
+    pb = nullptr;
+    pb = allocator_allocate(al(), 1);
+    allocator_rebind_t<Allocator, value_type> val(al());
+    pb->data_ = nullptr;
+    pb->data_ = allocator_allocate(val, N);
+    pb->mask = 0;
+    blist.link_available_at_back(pb);
+    ++num_blocks;
+  }
+
   void delete_block(block_pointer pb) noexcept
   {
     allocator_rebind_t<Allocator, value_type> val(al());
@@ -1582,34 +1616,6 @@ private:
     blist.reset();
     num_blocks = 0;
     size_ = 0;
-  }
-
-  template<typename... Args>
-  iterator grow_and_emplace(Args&&... args)
-  {
-    auto pb = allocator_allocate(al(), 1);
-    BOOST_TRY {
-      allocator_rebind_t<Allocator, value_type> val(al());
-      pb->data_ = nullptr;
-      pb->data_ = allocator_allocate(val, N);
-      allocator_construct(
-        al(), boost::to_address(pb->data()), std::forward<Args>(args)...);
-    }
-    BOOST_CATCH(...) {
-      if(pb->data() != nullptr) {
-        allocator_rebind_t<Allocator, value_type> val(al());
-        allocator_deallocate(val, pb->data(), N);
-      }
-      allocator_deallocate(al(), pb, 1);
-      BOOST_RETHROW;
-    }
-    BOOST_CATCH_END
-    pb->mask = 1;
-    blist.link_available_at_back(pb);
-    blist.link_at_back(pb);
-    ++num_blocks;
-    ++size_;
-    return {pb, 0};
   }
 
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
