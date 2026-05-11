@@ -1594,12 +1594,6 @@ private:
       pb->data_ = allocator_allocate(val, N);
       allocator_construct(
         al(), boost::to_address(pb->data()), std::forward<Args>(args)...);
-      pb->mask = 1;
-      blist.link_available_at_back(pb);
-      blist.link_at_back(pb);
-      ++num_blocks;
-      ++size_;
-      return {pb, 0};
     }
     BOOST_CATCH(...) {
       if(pb->data() != nullptr) {
@@ -1610,6 +1604,12 @@ private:
       BOOST_RETHROW;
     }
     BOOST_CATCH_END
+    pb->mask = 1;
+    blist.link_available_at_back(pb);
+    blist.link_at_back(pb);
+    ++num_blocks;
+    ++size_;
+    return {pb, 0};
   }
 
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
