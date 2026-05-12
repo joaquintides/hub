@@ -1169,20 +1169,7 @@ public:
     auto nb = num_blocks;
     int  n;
     auto pb = retrieve_available_block(n);
-    BOOST_TRY{
-      allocator_construct(
-        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
-    }
-    BOOST_CATCH(...) {
-      if(num_blocks != nb) {
-        /* strong exception safety -> capacity restored */
-        blist.unlink_available(pb);
-        delete_block(pb);
-        --num_blocks;
-      }
-      BOOST_RETHROW
-    }
-    BOOST_CATCH_END
+    construct_or_restore_capacity(pb, n, nb, std::forward<Args>(args)...);
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
@@ -1592,6 +1579,27 @@ private:
     blist.reset();
     num_blocks = 0;
     size_ = 0;
+  }
+
+  template<typename... Args>
+  inline void construct_or_restore_capacity(
+    block_pointer pb, int n, size_type original_num_blocks,
+    Args&&... args)
+  {
+    BOOST_TRY {
+      allocator_construct(
+        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    }
+    BOOST_CATCH(...) {
+      if(num_blocks != original_num_blocks) {
+        /* strong exception safety -> capacity restored */
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
+      }
+      BOOST_RETHROW
+    }
+    BOOST_CATCH_END
   }
 
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
