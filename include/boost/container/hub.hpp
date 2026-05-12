@@ -1166,33 +1166,21 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
-    auto pb = static_cast_block_pointer(blist.next_available);
+    auto nb = num_blocks;
     int  n;
-    auto allocation_needed = (pb == blist.header());
-    BOOST_TRY {
-      if(BOOST_UNLIKELY(allocation_needed)) {
-        uncaught_create_new_available_block(pb);
-        n = 0;  
-      }
-      else {
-        n = hub_detail::unchecked_countr_one(pb->mask);
-      }
+    auto pb = retrieve_available_block(n);
+    BOOST_TRY{
       allocator_construct(
         al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
     }
     BOOST_CATCH(...) {
-      if(allocation_needed) {
-        if(pb != nullptr) {
-          if(pb->data() != nullptr) {
-            blist.unlink_available(pb);
-            --num_blocks;
-            allocator_rebind_t<Allocator, value_type> val(al());
-            allocator_deallocate(val, pb->data(), N);
-          }
-          allocator_deallocate(al(), pb, 1);
-        }
+      if(num_blocks != nb) {
+        /* strong exception safety -> capacity restored */
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
       }
-      BOOST_RETHROW;
+      BOOST_RETHROW
     }
     BOOST_CATCH_END
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
@@ -1269,7 +1257,7 @@ public:
       if(first.pbb != pbb) break;
     }
     auto pbb = first.pbb;
-    if(pbb != last.pbb){
+    if(pbb != last.pbb) {
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
@@ -1517,18 +1505,6 @@ private:
     return pb;
   }
 
-  void uncaught_create_new_available_block(block_pointer& pb)
-  {
-    pb = nullptr;
-    pb = allocator_allocate(al(), 1);
-    allocator_rebind_t<Allocator, value_type> val(al());
-    pb->data_ = nullptr;
-    pb->data_ = allocator_allocate(val, N);
-    pb->mask = 0;
-    blist.link_available_at_back(pb);
-    ++num_blocks;
-  }
-
   void delete_block(block_pointer pb) noexcept
   {
     allocator_rebind_t<Allocator, value_type> val(al());
@@ -1640,7 +1616,7 @@ private:
         ++size_;
         if(BOOST_UNLIKELY(pb->mask == 0)) blist.link_at_back(pb);
         pb->mask |= pb->mask +1;
-        if(pb->mask == full){
+        if(pb->mask == full) {
           blist.unlink_available(pb);
           break;
         }
