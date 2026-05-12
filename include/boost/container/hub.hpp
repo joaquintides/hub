@@ -1166,10 +1166,11 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
-    auto nb = num_blocks;
+    auto pbb = blist.next_available; /* for construct_or_restore_capacity */
     int  n;
     auto pb = retrieve_available_block(n);
-    construct_or_restore_capacity(pb, n, nb, std::forward<Args>(args)...);
+    construct_or_restore_capacity(
+      boost::to_address(pb->data() + n), pbb, std::forward<Args>(args)...);
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
@@ -1583,16 +1584,14 @@ private:
 
   template<typename... Args>
   inline void construct_or_restore_capacity(
-    block_pointer pb, int n, size_type original_num_blocks,
-    Args&&... args)
+    value_type* p, block_base_pointer pbb, Args&&... args)
   {
     BOOST_TRY {
-      allocator_construct(
-        al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+      allocator_construct(al(), p, std::forward<Args>(args)...);
     }
     BOOST_CATCH(...) {
-      if(num_blocks != original_num_blocks) {
-        /* strong exception safety -> capacity restored */
+      auto pb = static_cast_block_pointer(blist.next_available);
+      if(pb != pbb) { /* block freshly allocated -> restore capacity */
         blist.unlink_available(pb);
         delete_block(pb);
         --num_blocks;
