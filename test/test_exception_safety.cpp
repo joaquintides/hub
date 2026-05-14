@@ -5,6 +5,8 @@
  */
 
 #include <algorithm>
+#include <boost/config.hpp>
+#include <boost/config/workaround.hpp>
 #include <boost/container/hub.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <climits>
@@ -225,6 +227,12 @@ private:
 #pragma warning(disable:4127) /* conditional expression is constant */
 #endif
 
+#if BOOST_WORKAROUND(BOOST_GCC,>=60000 && BOOST_GCC<80000)
+/* https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80947 */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wattributes"
+#endif
+
 template<typename Hub, typename Propagate, typename AlwaysEqual, typename Data>
 void test_allocator_ops(const Data& original_hubs)
 {
@@ -362,6 +370,10 @@ void test_allocator_ops(const Data& original_hubs)
     }
   }
 }
+
+#if BOOST_WORKAROUND(BOOST_GCC,>=60000 && BOOST_GCC<80000)
+#pragma GCC diagnostic pop
+#endif
 
 #if defined(BOOST_MSVC)
 #pragma warning(pop) /* C4127 */
