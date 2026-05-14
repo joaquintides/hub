@@ -11,6 +11,7 @@
 #include <iterator>
 #include <new>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 #include "utility.hpp"
 
@@ -100,8 +101,24 @@ struct throwing_int
 
   static void countdown_to_throw(int n) { countdown = n; }
 
+  struct no_dangling_objects_guard
+  {
+    ~no_dangling_objects_guard()
+    {  
+      BOOST_TEST_EQ(outstanding_objects, n);
+    }
+
+    std::size_t n;
+  };
+
+  static no_dangling_objects_guard check_no_dangling_objects_on_exit()
+  {
+    return {outstanding_objects};
+  }
+
 private:
-  static int countdown;
+  static int         countdown;
+  static std::size_t outstanding_objects;
 
   static void maybe_throw() 
   { 
@@ -116,7 +133,8 @@ private:
   int n = INT_MIN;
 };
 
-int throwing_int::countdown = 0;
+int         throwing_int::countdown = 0;
+std::size_t throwing_int::outstanding_objects = 0;
 
 template<typename Class, std::size_t ExtraSpace>
 struct make_bigger: Class
@@ -139,13 +157,29 @@ struct throwing_allocator_no_leaks_guard
   std::size_t n;
 };
 
-template<typename T>
+template<
+  typename T,
+  typename Propagate = std::false_type, typename AlwaysEqual = std::false_type
+>
 struct throwing_allocator
 {
   using value_type = T;
+  using propagate_on_container_copy_assignment = Propagate;
+  using propagate_on_container_move_assignment = Propagate;
+  using propagate_on_container_swap = Propagate;
+  using is_always_equal = AlwaysEqual;
 
-  throwing_allocator() = default;
-  template<typename U> throwing_allocator(const throwing_allocator<U>&) {}
+  template<typename U>
+  struct rebind
+  {
+    using other = throwing_allocator<U, Propagate, AlwaysEqual>;
+  };
+
+  throwing_allocator(int state_ = 0): state{state_} {}
+
+  template<typename U>
+  throwing_allocator(const throwing_allocator<U, Propagate, AlwaysEqual>& x):
+    state{x.state} {}
 
   T* allocate(std::size_t n)
   {
@@ -161,8 +195,12 @@ struct throwing_allocator
     ::operator delete(p);
   }
 
-  bool operator==(const throwing_allocator&) const { return true; }
-  bool operator!=(const throwing_allocator&) const { return false; }
+  bool operator==(const throwing_allocator& x) const
+  {
+    return AlwaysEqual::value || (state == x.state);
+  }
+
+  bool operator!=(const throwing_allocator& x) const { return !(*this == x); }
 
   static void countdown_to_throw(int n) { throwing_allocator_countdown = n; }
 
@@ -170,6 +208,8 @@ struct throwing_allocator
   {
     return {throwing_allocator_outstanding_allocations};
   }
+
+  int state;
 
 private:
   static void maybe_throw() 
@@ -180,91 +220,268 @@ private:
   }
 };
 
-int main()
+#if defined(BOOST_MSVC)
+#pragma warning(push)
+#pragma warning(disable:4127) /* conditional expression is constant */
+#endif
+
+template<typename Hub, typename Propagate, typename AlwaysEqual, typename Data>
+void test_allocator_ops(const Data& original_hubs)
 {
-  using value_type = throwing_int;
-  using allocator_type = throwing_allocator<value_type>;
-  using hub = boost::container::hub<value_type, allocator_type>;
+  using hub = rebind_allocator_t<
+    Hub, throwing_allocator<void, Propagate,AlwaysEqual>>;
+  using value_type = typename hub::value_type;
+  using allocator_type = typename hub::allocator_type;
 
   std::vector<hub> hubs;
+  for(const auto& oh: original_hubs) {
+    if(!oh.empty()) hubs.emplace_back(oh.begin(), oh.end());
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM 
+  << "Allocator propagate: " << Propagate::value 
+  << ", always_equal: " << AlwaysEqual::value << "\n";
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "  Copy/move ctors, value_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
+
+    value_type::countdown_to_throw((int)(ch.size() / 2));
+    BOOST_TEST_THROWS((void)hub(ch), std::runtime_error);
+
+    if(!AlwaysEqual::value) {
+      auto h = ch;
+      test_basic_exception_safety(h,
+        [&h] {
+          value_type::countdown_to_throw((int)(h.size() / 2));
+          (void)hub{std::move(h), allocator_type{1}};
+        });
+    }
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
+  "  Copy/move ctors, allocator_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
+
+    allocator_type::countdown_to_throw((int)(ch.size() / 64 * 2) + 1);
+    BOOST_TEST_THROWS((void)hub(ch), std::runtime_error);
+    allocator_type::countdown_to_throw((int)(ch.size() / 64 * 2) + 2);
+    BOOST_TEST_THROWS((void)hub(ch), std::runtime_error);
+
+    if(!AlwaysEqual::value) {
+      auto h = ch;
+      test_basic_exception_safety(h,
+        [&h] {
+          allocator_type::countdown_to_throw((int)(h.size() / 64 * 2) + 1);
+          (void)hub{std::move(h), allocator_type{1}};
+        });
+
+      h = ch;
+      test_basic_exception_safety(h,
+        [&h] {
+          allocator_type::countdown_to_throw((int)(h.size() / 64 * 2) + 2);
+          (void)hub{std::move(h), allocator_type{1}};
+        });
+    }
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << 
+  "  Copy/move assignment, value_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
+
+    hub dst0{allocator_type{1}};
+    test_basic_exception_safety(dst0,
+      [&dst0, &ch] {
+        value_type::countdown_to_throw((int)(ch.size() / 2));
+        dst0 = ch;
+      });
+
+    if(!AlwaysEqual::value && !Propagate::value) {
+      hub src1{ch}, dst1{allocator_type{1}};
+      test_basic_exception_safety(src1,
+        [&src1, &dst1] {
+          test_basic_exception_safety(dst1,
+            [&src1, &dst1] {
+              value_type::countdown_to_throw((int)(src1.size() / 2));
+              dst1 = std::move(src1);
+            });
+          throw std::runtime_error("throw for enclosing test");
+        });
+    }
+  }
+
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << 
+  "  Copy/move assignment, allocator_type throws\n";
+  for(const auto& ch: hubs) {
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
+
+    hub dst0{allocator_type{1}};
+    test_basic_exception_safety(dst0,
+      [&dst0, &ch] {
+        allocator_type::countdown_to_throw((int)(ch.size() / 64 * 2) + 1);
+        dst0 = ch;
+      });
+
+    hub dst1{allocator_type{1}};
+    test_basic_exception_safety(dst1,
+      [&dst1, &ch] {
+        allocator_type::countdown_to_throw((int)(ch.size() / 64 * 2) + 2);
+        dst1 = ch;
+      });
+
+    if(!AlwaysEqual::value && !Propagate::value) {
+      hub src2{ch}, dst2{allocator_type{1}};
+      test_basic_exception_safety(src2,
+        [&src2, &dst2] {
+          test_basic_exception_safety(dst2,
+            [&src2, &dst2] {
+              allocator_type::countdown_to_throw(
+                (int)(src2.size() / 64 * 2) + 1);
+              dst2 = std::move(src2);
+            });
+          throw std::runtime_error("throw for enclosing test");
+        });
+
+      hub src3{ch}, dst3{allocator_type{1}};
+      test_basic_exception_safety(src3,
+        [&src3, &dst3] {
+          test_basic_exception_safety(dst3,
+            [&src3, &dst3] {
+              allocator_type::countdown_to_throw(
+                (int)(src3.size() / 64 * 2) + 2);
+              dst3 = std::move(src3);
+            });
+          throw std::runtime_error("throw for enclosing test");
+        });
+    }
+  }
+}
+
+#if defined(BOOST_MSVC)
+#pragma warning(pop) /* C4127 */
+#endif
+
+template<typename Hub>
+void test()
+{
+  using value_type = typename Hub::value_type;
+  using allocator_type = typename Hub::allocator_type;
+
+  std::vector<Hub> hubs;
   hubs.emplace_back();
-  hubs.emplace_back(hub{0, 2, 1});
-  hubs.emplace_back(hub{64, 5}); /* capacity() - size() == 0 */
+  hubs.emplace_back(Hub{0, 2, 1});
+  hubs.emplace_back(Hub{64, 5}); /* capacity() - size() == 0 */
   hubs.emplace_back([] {
-    hub h;
+    Hub h;
     for(int i = 0; i < 1000; ++i) h.insert(-i);
     puncture(h);
     return h;
   }());
 
-  BOOST_LIGHTWEIGHT_TEST_OSTREAM << "Non copy/move ctors, value_type throws\n";
+  BOOST_LIGHTWEIGHT_TEST_OSTREAM << 
+  "Non copy/move ctors and assignment, value_type throws\n";
   {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     
     value_type::countdown_to_throw(100);
-    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200), std::runtime_error);
 
     value_type::countdown_to_throw(100);
-    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200, value_type{42}), std::runtime_error);
 
     auto rng = make_range<value_type>(200);
     value_type::countdown_to_throw(100);
-    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(rng.begin(), rng.end()), std::runtime_error);
 
 #if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
     value_type::countdown_to_throw(100);
     BOOST_TEST_THROWS(
-      (void)hub(boost::container::from_range, rng), std::runtime_error);
+      (void)Hub(boost::container::from_range, rng), std::runtime_error);
 #endif
 
     std::initializer_list<value_type> il = {0, 1, 2, 3};
     value_type::countdown_to_throw(2);
-    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(il), std::runtime_error);
+
+    Hub h;
+    test_basic_exception_safety(h, 
+      [&h]{
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        value_type::countdown_to_throw(2);
+        h = il;
+      });
   }
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM <<
-  "Non copy/move ctors, allocator_type throws\n";
+  "Non copy/move ctors and assignment, allocator_type throws\n";
   {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     
     allocator_type::countdown_to_throw(3);
-    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200), std::runtime_error);
     allocator_type::countdown_to_throw(4);
-    BOOST_TEST_THROWS((void)hub(200), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200), std::runtime_error);
 
     allocator_type::countdown_to_throw(3);
-    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200, value_type{42}), std::runtime_error);
     allocator_type::countdown_to_throw(4);
-    BOOST_TEST_THROWS((void)hub(200, 42), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(200, value_type{42}), std::runtime_error);
 
     auto rng = make_range<value_type>(200);
     allocator_type::countdown_to_throw(3);
-    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(rng.begin(), rng.end()), std::runtime_error);
     allocator_type::countdown_to_throw(4);
-    BOOST_TEST_THROWS((void)hub(rng.begin(), rng.end()), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(rng.begin(), rng.end()), std::runtime_error);
 
 #if !defined(BOOST_CONTAINER_HUB_NO_RANGES)
     allocator_type::countdown_to_throw(3);
     BOOST_TEST_THROWS(
-      (void)hub(boost::container::from_range, rng), std::runtime_error);
+      (void)Hub(boost::container::from_range, rng), std::runtime_error);
     allocator_type::countdown_to_throw(4);
     BOOST_TEST_THROWS(
-      (void)hub(boost::container::from_range, rng), std::runtime_error);
+      (void)Hub(boost::container::from_range, rng), std::runtime_error);
 #endif
 
     std::initializer_list<value_type> il = {0, 1, 2, 3};
     allocator_type::countdown_to_throw(1);
-    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(il), std::runtime_error);
     allocator_type::countdown_to_throw(2);
-    BOOST_TEST_THROWS((void)hub(il), std::runtime_error);
+    BOOST_TEST_THROWS((void)Hub(il), std::runtime_error);
+
+    Hub h0;
+    test_basic_exception_safety(h0, 
+      [&h0]{
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        allocator_type::countdown_to_throw(1);
+        h0 = il;
+      });
+
+    Hub h1;
+    test_basic_exception_safety(h1, 
+      [&h1]{
+        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        allocator_type::countdown_to_throw(2);
+        h1 = il;
+      });
   }
 
-  /* TODO: copy/move ctors */
-  /* TODO: operator= */
+  test_allocator_ops<Hub, std::false_type, std::false_type>(hubs);
+  test_allocator_ops<Hub, std::false_type, std::true_type >(hubs);
+  test_allocator_ops<Hub, std::true_type,  std::false_type>(hubs);
+  test_allocator_ops<Hub, std::true_type,  std::true_type >(hubs);
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "assign[_range], value_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
 
     test_basic_exception_safety(h,
@@ -289,7 +506,8 @@ int main()
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "assign[_range], allocator_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
 
     test_basic_exception_safety(h,
@@ -333,7 +551,8 @@ int main()
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "reserve, allocator_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
 
     test_basic_exception_safety(h,
@@ -349,7 +568,8 @@ int main()
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "shrink_to_fit, value_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
 
     test_basic_exception_safety(h, [&h] {
@@ -362,7 +582,8 @@ int main()
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "emplace/insert, value_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
 
     test_strong_exception_safety(h,
@@ -419,7 +640,8 @@ int main()
 
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "emplace/insert, allocator_type throws\n";
   for(const auto& ch: hubs) {
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
     auto h = ch;
     fill_till_capacity(h);
 
@@ -523,7 +745,8 @@ int main()
   BOOST_LIGHTWEIGHT_TEST_OSTREAM << "sort, value_type throws\n";
   for(const auto& ch: hubs) {
     if(std::is_sorted(ch.begin(), ch.end())) continue;
-    auto guard = allocator_type::check_no_leaks_on_exit();
+    auto guard0 = allocator_type::check_no_leaks_on_exit();
+    auto guard1 = value_type::check_no_dangling_objects_on_exit();
 
     /* transfer_sort */
     auto h0 = ch;
@@ -535,7 +758,7 @@ int main()
 
     /* proxy_sort */
     using bigger_element_hub = 
-      boost::container::hub<make_bigger<value_type, 128>>;
+      rebind_value_type_t<Hub, make_bigger<value_type, 128>>;
      
     bigger_element_hub h1{ch.begin(), ch.end()};
     test_basic_exception_safety(h1,
@@ -555,6 +778,12 @@ int main()
         h2.sort();
       });
   }
+}
+
+int main()
+{
+  test<
+    boost::container::hub<throwing_int, throwing_allocator<throwing_int>>>();
 
   return boost::report_errors();
 }

@@ -65,21 +65,6 @@ struct tracked
   tracked_provenance origin, last_op = ab_ovo;
 };
 
-template<typename Hub, typename U>
-struct rebind_value_type;
-
-template<
-  template<typename...> class Hub, typename T, typename Allocator,
-  typename U
->
-struct rebind_value_type<Hub<T, Allocator>, U>
-{
-  using type = Hub<U, boost::allocator_rebind_t<Allocator, U>>;
-};
-
-template<typename Hub, typename U>
-using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
-
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
   std::true_type, const typename Hub::allocator_type&, Args&&... args)
