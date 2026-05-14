@@ -410,12 +410,12 @@ void test()
     value_type::countdown_to_throw(2);
     BOOST_TEST_THROWS((void)Hub(il), std::runtime_error);
 
-    Hub h;
-    test_basic_exception_safety(h, 
-      [&h]{
-        std::initializer_list<value_type> il = {0, 1, 2, 3};
+    Hub h0;
+    test_basic_exception_safety(h0, 
+      [&h0]{
+        std::initializer_list<value_type> il0 = {0, 1, 2, 3};
         value_type::countdown_to_throw(2);
-        h = il;
+        h0 = il0;
       });
   }
 
@@ -459,17 +459,17 @@ void test()
     Hub h0;
     test_basic_exception_safety(h0, 
       [&h0]{
-        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        std::initializer_list<value_type> il0 = {0, 1, 2, 3};
         allocator_type::countdown_to_throw(1);
-        h0 = il;
+        h0 = il0;
       });
 
     Hub h1;
     test_basic_exception_safety(h1, 
       [&h1]{
-        std::initializer_list<value_type> il = {0, 1, 2, 3};
+        std::initializer_list<value_type> il1 = {0, 1, 2, 3};
         allocator_type::countdown_to_throw(2);
-        h1 = il;
+        h1 = il1;
       });
   }
 
