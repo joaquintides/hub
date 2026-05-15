@@ -83,7 +83,7 @@ Consult the section ["Comparison with `std::hive`"](#comparison-with-stdhive) fo
 The primary use case for `boost::container::hub`, `std::hive` and similar containers such
 as _slot maps_ is in high-performance scenarios where elements are created and destroyed frequently,
 insertion order is not relevant and pointer/iterator stability is required: game entity systems,
-particle simulation and HFT come to mind.
+particle simulation and high-frequency trading come to mind.
 
 ## Getting started
 
