@@ -59,8 +59,8 @@ void test_basic_exception_safety(ThrowingHub& h, F f)
   }
 }
 
-template<typename Hub, typename F, typename... Fs>
-void test_basic_exception_safety(Hub& h, F f, Fs... fs)
+template<typename ThrowingHub, typename F, typename... Fs>
+void test_basic_exception_safety(ThrowingHub& h, F f, Fs... fs)
 {
   test_basic_exception_safety(h, f);
   test_basic_exception_safety(h, fs...);
@@ -84,8 +84,8 @@ void test_strong_exception_safety(ThrowingHub& h, F f)
   }
 }
 
-template<typename Hub, typename F, typename... Fs>
-void test_strong_exception_safety(Hub& h, F f, Fs... fs)
+template<typename ThrowingHub, typename F, typename... Fs>
+void test_strong_exception_safety(ThrowingHub& h, F f, Fs... fs)
 {
   test_strong_exception_safety(h, f);
   test_strong_exception_safety(h, fs...);
