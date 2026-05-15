@@ -1156,9 +1156,9 @@ public:
       auto pb = static_cast_block_pointer(pbb);
       pbb = pbb-> next_available;
       if(pb->mask == 0) {
-         blist.unlink_available(pb);
-         delete_block(pb);
-         --num_blocks;
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
       }
     }
   }
@@ -1166,10 +1166,11 @@ public:
   template<typename... Args>
   BOOST_FORCEINLINE iterator emplace(Args&&... args)
   {
+    auto pbb = blist.next_available; /* for construct_or_restore_capacity */
     int  n;
     auto pb = retrieve_available_block(n);
-    allocator_construct(
-      al(), boost::to_address(pb->data() + n), std::forward<Args>(args)...);
+    construct_or_restore_capacity(
+      boost::to_address(pb->data() + n), pbb, std::forward<Args>(args)...);
     auto mask_plus_one = (pb->mask |= pb->mask + 1) + 1;
     if(BOOST_UNLIKELY(mask_plus_one <= 2)) {
       /* pb->mask == 0 (impossible), 1 or full */
@@ -1244,7 +1245,7 @@ public:
       if(first.pbb != pbb) break;
     }
     auto pbb = first.pbb;
-    if(pbb != last.pbb){
+    if(pbb != last.pbb) {
       do {
         auto pb = static_cast_block_pointer(pbb);
         pbb = pb->next;
@@ -1501,7 +1502,7 @@ private:
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
   {
-    if(BOOST_LIKELY(blist.next_available != blist.header())){
+    if(BOOST_LIKELY(blist.next_available != blist.header())) {
       auto pb = static_cast_block_pointer(blist.next_available);
       n = hub_detail::unchecked_countr_one(pb->mask);
       return pb;
@@ -1581,6 +1582,25 @@ private:
     size_ = 0;
   }
 
+  template<typename... Args>
+  inline void construct_or_restore_capacity(
+    value_type* p, block_base_pointer pbb, Args&&... args)
+  {
+    BOOST_TRY {
+      allocator_construct(al(), p, std::forward<Args>(args)...);
+    }
+    BOOST_CATCH(...) {
+      auto pb = static_cast_block_pointer(blist.next_available);
+      if(pb != pbb) { /* block freshly allocated -> restore capacity */
+        blist.unlink_available(pb);
+        delete_block(pb);
+        --num_blocks;
+      }
+      BOOST_RETHROW
+    }
+    BOOST_CATCH_END
+  }
+
   BOOST_FORCEINLINE void erase_impl(block_base_pointer pbb, int n) noexcept
   {
     auto pb = static_cast_block_pointer(pbb);
@@ -1603,7 +1623,7 @@ private:
         ++size_;
         if(BOOST_UNLIKELY(pb->mask == 0)) blist.link_at_back(pb);
         pb->mask |= pb->mask +1;
-        if(pb->mask == full){
+        if(pb->mask == full) {
           blist.unlink_available(pb);
           break;
         }

@@ -43,6 +43,21 @@ void puncture(Container& x, EraseCallback callback = EraseCallback())
   }
 }
 
+template<typename Hub, typename U>
+struct rebind_value_type;
+
+template<
+  template<typename...> class Hub, typename T, typename Allocator,
+  typename U
+>
+struct rebind_value_type<Hub<T, Allocator>, U>
+{
+  using type = Hub<U, boost::allocator_rebind_t<Allocator, U>>;
+};
+
+template<typename Hub, typename U>
+using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
+
 template<typename Hub, typename OtherAllocator>
 struct rebind_allocator;
 
@@ -96,7 +111,7 @@ struct stateful_allocator
   stateful_allocator(int state_ = 0): state{state_} {}
 
   template<typename U>
-  stateful_allocator(const stateful_allocator<U,Propagate,AlwaysEqual>& x):
+  stateful_allocator(const stateful_allocator<U, Propagate, AlwaysEqual>& x):
     state{x.state}, num_allocations{x.num_allocations} {}
 
   T* allocate(std::size_t n)
