@@ -1522,10 +1522,13 @@ _Remarks:_ Invalidates references, pointers, and iterators referring to the eras
 `  void sort(Compare comp = Compare());`
 
 _Preconditions:_ `T` is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`,
+[`MoveConstructible`](https://en.cppreference.com/cpp/named_req/MoveConstructible),
 [`MoveAssignable`](https://en.cppreference.com/w/cpp/named_req/MoveAssignable), 
 and [`Swappable`](https://en.cppreference.com/w/cpp/named_req/Swappable). <br/>
 _Effects:_ Sorts `*this` according to the `comp` function object.
-If an exception is thrown, the order of the elements in `*this` is unspecified. <br/>
+If an exception is thrown by `comp` or by any operation on `T`, `*this` is left
+in a valid but unspecified state.
+If an exception is thrown when the function internally allocates memory, there are no effects. <br/>
 _Complexity:_ O(<i>N</i>·log<i>N</i>) comparisons, where _N_ is `size()`. <br/>
 _Remarks:_ May allocate.
 References, pointers, and iterators referring to elements in `*this` may be invalidated. <br/>
