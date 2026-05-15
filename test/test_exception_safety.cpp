@@ -45,12 +45,14 @@ void fill_till_capacity(boost::container::hub<T, Allocator>& h)
   while(h.size() < h.capacity()) h.insert(value_type{0});
 }
 
-template<typename Hub, typename F>
-void test_basic_exception_safety(Hub& h, F f)
+template<typename ThrowingHub, typename F>
+void test_basic_exception_safety(ThrowingHub& h, F f)
 {
   try {
     f();
     BOOST_ERROR("Expected exception was not thrown");
+    ThrowingHub::value_type::countdown_to_throw(0);
+    ThrowingHub::allocator_type::countdown_to_throw(0);
   }
   catch(...) {
     check_valid(h);
@@ -64,14 +66,16 @@ void test_basic_exception_safety(Hub& h, F f, Fs... fs)
   test_basic_exception_safety(h, fs...);
 }
 
-template<typename Hub, typename F>
-void test_strong_exception_safety(Hub& h, F f)
+template<typename ThrowingHub, typename F>
+void test_strong_exception_safety(ThrowingHub& h, F f)
 {
   auto c = h.capacity();
   std::vector<int> backup{h.begin(), h.end()};
   try { 
     f(); 
     BOOST_ERROR("Expected exception was not thrown");
+    ThrowingHub::value_type::countdown_to_throw(0);
+    ThrowingHub::allocator_type::countdown_to_throw(0);
   }
   catch(...) {
     check_valid(h);
@@ -227,7 +231,7 @@ private:
 #pragma warning(disable:4127) /* conditional expression is constant */
 #endif
 
-#if BOOST_WORKAROUND(BOOST_GCC,>=60000 && BOOST_GCC<80000)
+#if BOOST_WORKAROUND(BOOST_GCC, >= 60000 && BOOST_GCC < 80000)
 /* https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80947 */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wattributes"
@@ -371,7 +375,7 @@ void test_allocator_ops(const Data& original_hubs)
   }
 }
 
-#if BOOST_WORKAROUND(BOOST_GCC,>=60000 && BOOST_GCC<80000)
+#if BOOST_WORKAROUND(BOOST_GCC, >= 60000 && BOOST_GCC < 80000)
 #pragma GCC diagnostic pop
 #endif
 
