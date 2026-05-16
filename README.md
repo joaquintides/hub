@@ -1287,9 +1287,6 @@ whereas all const member functions and associated functions taking
 `boost::container::hub` by const reference provide the
 [strong exception guarantee](https://en.cppreference.com/w/cpp/language/exceptions#Exception_safety).
 
-Except when explicitly noted, no operation throws an exception unless that exception
-is thrown by the container's `Allocator` object (if any).
-
 #### Constructors, copy and assignment
 
 `hub() noexcept(noexcept(Allocator()));`
