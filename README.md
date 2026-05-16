@@ -98,7 +98,7 @@ compiling the example program shown above.
 
 ## Tutorial
 
-If you're familiar with STL sequence containers (`std::list`,  `std::vector`),
+If you're familiar with STL containers such as `std::list` and `std::vector`,
 getting used to `boost::container::hub` is entirely straightforward as its API is
 mostly analogous. The key characteristics that set this container apart are:
 
@@ -1112,13 +1112,19 @@ template<typename T>
 
 `boost::container::hub` — A container with constant-time insertion and erasure and
 element stability. `boost::container::hub<T, Allocator>` is a model of
-[`SequenceContainer`](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
+[`Container`](https://en.cppreference.com/w/cpp/named_req/Container.html),
 [`ReversibleContainer`](https://en.cppreference.com/w/cpp/named_req/ReversibleContainer.html) and
 [`AllocatorAwareContainer`](https://en.cppreference.com/w/cpp/named_req/AllocatorAwareContainer.html),
-with the following exceptions:
+with the following exception:
 
 * Operators `==` and `!=` are not provided.
-* Positional insertion operations are not provided: `emplace(position, args...)`, `insert(position, first, last)`, etc. 
+
+`boost::container::hub<T, Allocator>` is also a model of 
+[`SequenceContainer`](https://en.cppreference.com/w/cpp/named_req/SequenceContainer.html),
+with the following exception:
+
+* Positional insertion operations of the form `insert(position, ...)` or
+`emplace(position, ...)` are not provided or ignore the `position` argument.
 
 The iterators of `hub` are models of
 [`LegacyBidirectionalIterator`](https://en.cppreference.com/w/cpp/named_req/BidirectionalIterator).
@@ -1406,7 +1412,7 @@ _Remarks:_ All references, pointers, and iterators referring to elements in `*th
 _Preconditions:_ `T` is [`MoveInsertable`](https://en.cppreference.com/w/cpp/named_req/MoveInsertable) into `hub`. <br/>
 _Effects:_ Reallocates elements if needed so that the number of active blocks is minimized and deallocates all ensuing reserved blocks.
 If `capacity()` is already equal to `size()`, there are no effects. If an exception is thrown by `T` during reallocation, the effects are unspecified. <br/>
-_Complexity:_ If reallocation happens, linear in the size of the sequence. Also, linear in the number of reserved blocks. <br/>
+_Complexity:_ If reallocation happens, linear in `size()`. Also, linear in the number of reserved blocks. <br/>
 _Remarks:_ If reallocation happens, the order of the elements in `*this` may change and all references, pointers, and iterators referring
 to the elements in `*this` are invalidated.
 
