@@ -42,8 +42,8 @@ the current reference implementation of this standard container.
 
 ## Introduction
 
-`boost::container::hub` is a sequence container with O(1) insertion and erasure and _element stability_: 
-pointers/iterators to an element remain valid as long as the element is not erased.
+`boost::container::hub` is a container with constant-time insertion and erasure and _element stability_: 
+pointers/iterators to an element remain valid until the element is erased.
 
 ```cpp
 #include <boost/container/hub.hpp>
