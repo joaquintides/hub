@@ -70,7 +70,7 @@ int main()
 
 The observant reader may retort that `std::list` is also stable and provides constant-time insertion/erasure:
 the key difference is that `boost::container::hub` is orders of magnitude faster because memory is allocated
-in chunks of 64 contiguous elements, which amortizes allocation costs and provides some degree of
+in chunks of contiguous elements, which amortizes allocation costs and provides some degree of
 cache locality. An important tradeoff when using `boost::container::hub` is the fact that the user can't
 control the position where a new element will be inserted: `boost::container::hub` reuses the memory
 addresses of previously erased elements to maximize performance and keep the data structure as compact
@@ -105,9 +105,10 @@ mostly analogous. The key characteristics that set this container apart are:
 * Pointers and iterators to an element remain valid as long as the element is not
 erased. `hub` will _not_ reallocate elements as it grows in size.
 * Insertion and erasure are constant-time and very fast. Memory is allocated in
-blocks with capacity for 64 elements each, and the container keeps track of
-available positions, including those of erased elements, to use them for further
-insertions and keep the number of memory allocations to the minimum possible.
+element blocks with fixed capacity (64 elements per block in this implementation),
+and the container keeps track of available positions, including those of erased elements,
+to use them for further insertions and keep the number of memory allocations to the
+minimum possible.
 
 ### Unordered insertion
 
@@ -301,8 +302,9 @@ iterator increment can also be implemented in (non-amortized) constant time.
 `boost::container::hub` does not conform to the specification of `std::hive` in
 a few aspects:
 
-* Minimum and maximum block size limits can't be specified and are fixed to 64.
-`reshape` is not provided as it doesn't make sense when block capacity is fixed.
+* Minimum and maximum block size limits can't be specified and are fixed
+(to 64 in this implementation). `reshape` is not provided as it doesn't make sense when
+block capacity is fixed.
 * `trim_capacity` is linear on the number of _available_ blocks
 (`std::hive::trim_capacity` is linear on the number of _reserved_ blocks,
 i.e. those without any used slot).
@@ -1129,7 +1131,7 @@ with the following exception:
 The iterators of `hub` are models of
 [`LegacyBidirectionalIterator`](https://en.cppreference.com/w/cpp/named_req/BidirectionalIterator).
 
-Elements of a `hub` are stored in _blocks_ of contiguous memory with a capacity of 64 elements each.
+Elements of a `hub` are stored in _blocks_ of contiguous memory, each with a fixed element capacity.
 Insertion position is determined by the container, and insertion may reuse the memory locations
 of previously erased elements. A block with at least one element is called _active_; a block
 without any element is called _reserved_. When an active block becomes empty after element
