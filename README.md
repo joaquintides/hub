@@ -68,7 +68,7 @@ int main()
 }
 ```
 
-The observant reader may retort that `std::list` is also stable and provides O(1) insertion/erasure:
+The observant reader may retort that `std::list` is also stable and provides constant-time insertion/erasure:
 the key difference is that `boost::container::hub` is orders of magnitude faster because memory is allocated
 in chunks of 64 contiguous elements, which amortizes allocation costs and provides some degree of
 cache locality. An important tradeoff when using `boost::container::hub` is the fact that the user can't
