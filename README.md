@@ -1098,7 +1098,7 @@ template<typename T>
 } // namespace container
 } // namespace boost
 ```
-
+Implementation notes:
 * The library requires C++11 at a minimum. `std::uint64_t` must exist.
 * `from_range_t` and `from_range` are only available if the standard library provides
   `<ranges>` and `<concepts>`. If this is the case, `boost::container::from_range_t`
@@ -1106,7 +1106,6 @@ template<typename T>
   if this is provided; otherwise, it is a different type with the same characteristics.
 * `boost::container::pmr::hub` is only available if the standard library provides
   `<memory_resource>`.
-
 
 ### Class template `boost::container::hub`
 
@@ -1271,7 +1270,7 @@ template<
 } // namespace container
 } // namespace boost
 ```
-
+Implementation notes:
 * User-defined deduction guides are only available if the compiler supports CTAD. 
 * range-related operations are only available if the standard library provides
   `<ranges>` and `<concepts>`.
