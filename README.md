@@ -17,9 +17,8 @@ the current reference implementation of this standard container.
   * [Debugging](#debugging)
     * [Visual Studio Natvis](#visual-studio-natvis)
     * [GDB Pretty-Printer](#gdb-pretty-printer)
-* [Comparison with `std::hive`](#comparison-with-stdhive)
-  * [Motivation for a novel data structure](#motivation-for-a-novel-data-structure)
-  * [Deviations from `std::hive`](#deviations-from-stdhive)
+* [Motivation for a novel data structure](#motivation-for-a-novel-data-structure)
+* [Deviations from `std::hive`](#deviations-from-stdhive)
 * [Performance](#performance)
   * [GCC 15, x64](#gcc-15-x64)
   * [Clang 20, x64](#clang-20-x64)
@@ -78,7 +77,7 @@ as possible.
 
 `boost::container::hub` is very similar but not entirely equivalent to C++26
 [`std::hive`](https://eel.is/c++draft/sequences#hive) (hence the different naming).
-Consult the section ["Comparison with `std::hive`"](#comparison-with-stdhive) for details.
+Consult the section ["Deviations from `std::hive`"](#deviations-from-stdhive) for details.
 
 The primary use case for `boost::container::hub`, `std::hive` and similar containers such
 as _slot maps_ is in high-performance scenarios where elements are created and destroyed frequently,
@@ -256,8 +255,7 @@ And load the [`boost_hub_printers.py`](extra/boost_hub_printers.py) script befor
 (gdb) source <path-to-hub-repo>/extra/boost_hub_printers.py
 ```
 
-## Comparison with `std::hive`
-### Motivation for a novel data structure
+## Motivation for a novel data structure
 
 `std::hive` was [accepted into C++26](https://herbsutter.com/2025/02/17/trip-report-february-2025-iso-c-standards-meeting-hagenberg-austria)
 in February 2025. As of this writing, no major standard library implementor is providing
@@ -297,7 +295,7 @@ block can be effectively accomplished in constant time with
 (resp. `std::countr_one(mask)`). It is not hard to see that insertion, erasure and
 iterator increment can also be implemented in (non-amortized) constant time.
 
-### Deviations from `std::hive`
+## Deviations from `std::hive`
 
 `boost::container::hub` does not conform to the specification of `std::hive` in
 a few aspects:
@@ -318,9 +316,9 @@ iterators.
 
 The following functionality is specific to `boost::container::hub`:
 
-* As cache locality is relatively poorer than that of `plf::hive`, which can use
-much larger blocks, iteration performance may suffer. To partially alleviate this,
-_visitation_ functions `for_each`,  and
+* As cache locality is relatively poorer than that of other implementations of `std::hive`
+(like `plf::hive`), which can use much larger blocks, iteration performance may suffer.
+To partially alleviate this, _visitation_ functions `for_each`,  and
 `for_each_while` are provided: these are more performant than regular external
 iteration thanks to a combination of unrolling and prefetching techniques.
 * `erase_void` is an alternative to `erase` that does not return an iterator
