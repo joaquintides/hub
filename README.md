@@ -283,7 +283,9 @@ The internal data structure of `boost::container::hub` is as follows:
 * Active blocks are kept in an intrusive doubly-linked list. Block size
 is fixed to 64 elements.
 * Each block points to its associated element array and maintains a bitmask
-of used slots.
+of used slots. The reason why a block size of 64 has been chosen is because
+the resulting associated bitmask is a 64-bit word, for which most CPU
+architectures provide fast bit manipulation instructions.
 * _Available_ blocks (those with at least one free slot) are kept in another
 intrusive doubly-linked list (not shown in the diagram).
 
