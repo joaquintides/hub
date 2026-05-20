@@ -903,8 +903,8 @@ struct if_constexpr_void_else{ void operator()() const {} };
 template<typename F, typename G = if_constexpr_void_else>
 void if_constexpr(std::true_type, F f, G = G{}) { f(); }
 
-template<typename F, typename G>
-void if_constexpr(std::false_type, F, G g) { g(); }
+template<typename F, typename G = if_constexpr_void_else>
+void if_constexpr(std::false_type, F, G g = G{}) { g(); }
 
 template<typename T>
 void copy_assign_if(std::true_type, T& x, const T& y) { x = y; }
