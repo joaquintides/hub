@@ -142,7 +142,7 @@ for(int i = 0; i < 500; ++i) h.insert(i); // won't allocate as capacity() >= 500
 In the example, `h` ends up with 8 non-empty blocks and 8 empty (also called _reserved_)
 blocks:
 
-![hub size=500, capacity=1024](doc/img/hub_500_1024.png)
+<p align="center"><img src="doc/img/hub_500_1024.png" alt="hub size=500, capacity=1024" height=150 /></p>
 
 Empty blocks can be deallocated as follows:
 
@@ -150,7 +150,7 @@ Empty blocks can be deallocated as follows:
 h.trim_capacity(750); // capacity() rounded up to next multiple of 64 no less than 750
 ```
 
-![hub size=500, capacity=768](doc/img/hub_500_768.png)
+<p align="center"><img src="doc/img/hub_500_768.png" alt="hub size=500, capacity=768" height=150 /></p>
 
 or with:
 
@@ -158,7 +158,7 @@ or with:
 h.trim_capacity(); // equivalent to trim_capacity(0)
 ```
 
-![hub size=500, capacity=512](doc/img/hub_500_512.png)
+<p align="center"><img src="doc/img/hub_500_512.png" alt="hub size=500, capacity=512" height=150 /></p>
 
 Obviously, in this example `h.trim_capacity()` doesn't bring the capacity down to zero
 because the example `h` contains 500 elements.
@@ -169,7 +169,8 @@ non-empty blocks that can't be trimmed further:
 ```cpp
 erase_if(h, [](int x) { return x % 2 != 0; }); // erase odd values
 ```
-![hub size=250, capacity=512](doc/img/hub_250_512.png)
+
+<p align="center"><img src="doc/img/hub_250_512.png" alt="hub size=250, capacity=512" height=150 /></p>
 
 `shrink_to_fit` reallocates elements so that they occupy the minimum possible
 number of blocks, and then deallocates the remaining blocks:
@@ -177,7 +178,8 @@ number of blocks, and then deallocates the remaining blocks:
 ```cpp
 h.shrink_to_fit();
 ```
-![hub size=250, capacity=256](doc/img/hub_250_256.png)
+
+<p align="center"><img src="doc/img/hub_250_256.png" alt="hub size=250, capacity=256" height=150 /></p>
 
 If we print the elements of `h`:
 
@@ -251,7 +253,7 @@ section for a comparison of execution speeds. Consult the
 Add the [`boost_hub.natvis`](extra/boost_hub.natvis) visualizer to your project to allow
 for user-friendly inspection of `boost::container::hub`s.
 
-![Natvis window](doc/img/natvis.png)
+<p align="center"><img src="doc/img/natvis.png" alt="Natvis window" /></p>
 
 #### GDB Pretty-Printer
 
@@ -301,7 +303,7 @@ we can come up with a more efficient alternative design.
 
 The internal data structure of `boost::container::hub` is as follows:
 
-![diagram](doc/img/data_structure.png)
+<p align="center"><img src="doc/img/data_structure.png" alt="diagram" /></p>
 
 * Active blocks are kept in an intrusive doubly-linked list. Block size
 is fixed to 64 elements.
