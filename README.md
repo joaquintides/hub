@@ -161,7 +161,7 @@ h.trim_capacity(); // equivalent to trim_capacity(0)
 <p align="center"><img src="doc/img/hub_500_512.png" alt="hub size=500, capacity=512" height=150 /></p>
 
 Obviously, in this example `h.trim_capacity()` doesn't bring the capacity down to zero
-because `h` contains 500 elements.
+because `h` is not empty.
 
 After erasures, a `hub` may contain "holes" or available positions in
 non-empty blocks that can't be trimmed further:
