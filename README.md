@@ -233,7 +233,8 @@ boost::container::hub<int> h;
 for(auto& x: h) x *= 2;
 ```
 
-Can also be written as:
+can also be written as:
+
 ```cpp
 // Note this is _not_ std::for_each
 for_each(h, [](auto& x) { x *= 2; });
