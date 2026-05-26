@@ -331,9 +331,6 @@ a few aspects:
 * Minimum and maximum block size limits can't be specified and are fixed
 (to 64 in this implementation). `reshape` is not provided as it doesn't make sense when
 block capacity is fixed.
-* `trim_capacity` is linear on the number of _available_ blocks
-(`std::hive::trim_capacity` is linear on the number of _reserved_ blocks,
-i.e. those without any used slot).
 * Iterators are not
 [`three_way_comparable`](https://en.cppreference.com/w/cpp/utility/compare/three_way_comparable.html):
 Making them so would require extra block metadata and bookkeeping, and this overhead
@@ -1448,7 +1445,7 @@ to the elements in `*this` are invalidated.
 
 _Effects:_ For the first overload, all reserved blocks are deallocated, and `capacity()` is reduced accordingly.
 For the second overload, if `n >= capacity()` is `true`, there are no effects; otherwise, `capacity()` is reduced to no less than `n`. <br/>
-_Complexity:_ Linear in the number of non-full blocks. <br/>
+_Complexity:_ Linear in the number of reserved blocks deallocated. <br/>
 _Remarks:_ All references, pointers, and iterators referring to elements in `*this`, as well as the past-the-end iterator, remain valid.
 
 #### Modifiers
