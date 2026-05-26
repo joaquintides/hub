@@ -381,6 +381,35 @@ void test(const typename Hub::allocator_type& al = {})
     }
   }
 
+  /* available list partitioned in (non-empty)|(empty) */
+
+  {
+    static std::size_t N = 64; /* implementation defined */
+
+    Hub x{N + 1, value_type(), al};
+    x.reserve(10 * N);
+    for(int i = 0; i < N; ++i) x.erase(x.begin());
+    x.trim_capacity();
+    BOOST_TEST_EQ(x.capacity(), N);
+
+    x = Hub{2 * N + 1, value_type(), al};
+    x.reserve(10 * N);
+    x.erase(x.begin(), std::next(x.begin(), 2 * N));
+    x.trim_capacity();
+    BOOST_TEST_EQ(x.capacity(), N);
+
+    x = Hub{3 * N, value_type(), al};
+    x.reserve(10 * N);
+    auto pos0 = x.begin(),
+         pos1 = std::next(x.begin(), N),
+         pos2 = std::next(x.begin(), 2 * N);
+    x.erase(pos2, std::next(pos2, N / 2));
+    x.erase(pos1, std::next(pos1, N / 2));
+    x.erase(pos0, std::next(pos0, N / 2));
+    x.shrink_to_fit();
+    BOOST_TEST_EQ(x.capacity(), 2 * N);
+  }
+
   /* modifiers */
 
   using tracked_value_type = tracked<value_type>;
