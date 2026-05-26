@@ -388,24 +388,24 @@ void test(const typename Hub::allocator_type& al = {})
 
     Hub x{N + 1, value_type(), al};
     x.reserve(10 * N);
-    for(int i = 0; i < N; ++i) x.erase(x.begin());
+    for(std::size_t i = 0; i < N; ++i) x.erase(x.begin());
     x.trim_capacity();
     BOOST_TEST_EQ(x.capacity(), N);
 
     x = Hub{2 * N + 1, value_type(), al};
     x.reserve(10 * N);
-    x.erase(x.begin(), std::next(x.begin(), 2 * N));
+    x.erase(x.begin(), std::next(x.begin(), (int)(2 * N)));
     x.trim_capacity();
     BOOST_TEST_EQ(x.capacity(), N);
 
     x = Hub{3 * N, value_type(), al};
     x.reserve(10 * N);
     auto pos0 = x.begin(),
-         pos1 = std::next(x.begin(), N),
-         pos2 = std::next(x.begin(), 2 * N);
-    x.erase(pos2, std::next(pos2, N / 2));
-    x.erase(pos1, std::next(pos1, N / 2));
-    x.erase(pos0, std::next(pos0, N / 2));
+         pos1 = std::next(x.begin(), (int)(N)),
+         pos2 = std::next(x.begin(), (int)(2 * N));
+    x.erase(pos2, std::next(pos2, (int)(N / 2)));
+    x.erase(pos1, std::next(pos1, (int)(N / 2)));
+    x.erase(pos0, std::next(pos0, (int)(N / 2)));
     x.shrink_to_fit();
     BOOST_TEST_EQ(x.capacity(), 2 * N);
   }
