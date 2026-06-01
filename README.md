@@ -328,12 +328,16 @@ iterator increment can also be implemented in (non-amortized) constant time.
 `boost::container::hub` does not conform to the specification of `std::hive` in
 a few aspects:
 
-* Minimum and maximum block size limits can't be specified and are fixed
-(to 64 in this implementation). `reshape` is not provided as it doesn't make sense when
-block capacity is fixed.
+* Minimum and maximum block sizes cannot be specified and are fixed (currently at 64 ).
+Although the standard permits this design choice, users coming
+from other implementations of `std::hive` may find it surprising. Accordingly, we have
+omitted the following, which would otherwise serve no functional purpose:
+`hive_limits` construction, `block_capacity_limits`, `block_capacity_default_limits`,
+`block_capacity_hard_limits`, `is_within_hard_limits`, `reshape`.
 * Iterators are not
 [`three_way_comparable`](https://en.cppreference.com/w/cpp/utility/compare/three_way_comparable.html):
-Making them so would require extra block metadata and bookkeeping, and this overhead
+Making them so would require extra block metadata and bookkeeping, and this overhead,
+which is quite significant for small block sizes as used by `boost::container::hub`,
 was not deemed worth imposing over the potential usefulness of having ordered
 iterators.
 * `get_iterator` is not `noexcept`.
