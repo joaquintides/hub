@@ -348,10 +348,9 @@ To partially alleviate this, _visitation_ functions `for_each`,  and
 iteration thanks to a combination of unrolling and prefetching techniques.
 * `erase_void` is an alternative to `erase` that does not return an iterator
 to the next element, thus saving some potential runtime overhead.
-* The `end` iterator is stable and non-transferable, whereas for `std::hive`
-the `end` iterator is invalidated upon any insertion or the erasure of the last
-element (briefly put,
-`boost::container::hub::end` behaves like `std::list::end` whereas
+* The `end` iterator is guaranteed to be stable and non-transferable, whereas for `std::hive` the `end`
+iterator is allowed to invalidate upon insertion or erasure of the last element
+(briefly put, `boost::container::hub::end` behaves like `std::list::end` whereas
 `std::hive::end` behaves like `std::vector::end`). Technically, this is
 not a non-conformance but rather an extension to the specification of
 `std::hive`.
