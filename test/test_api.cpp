@@ -11,10 +11,21 @@
 #include <boost/core/allocator_access.hpp>
 #include <boost/core/lightweight_test.hpp>
 #include <boost/core/pointer_traits.hpp>
-#include <boost/interprocess/allocators/allocator.hpp>
-#include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
+
+/* GCC on Darwin cannot parse the system <mach/message.h> header
+ * (xnu_static_assert_struct_size uses Clang-only extensions).
+ */
+#if defined(__GNUC__) && !defined(__clang__) && defined(__APPLE__)
+#define BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS
+#endif
+
+#if !defined(BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS)
+#include <boost/interprocess/allocators/allocator.hpp>
+#include <boost/interprocess/managed_shared_memory.hpp>
+#endif
+
 #include <iterator>
 #include <memory>
 #include <string>
@@ -54,24 +65,9 @@ struct tracked
   tracked_provenance origin, last_op = ab_ovo;
 };
 
-template<typename Hub, typename U>
-struct rebind_value_type;
-
-template<
-  template<typename...> class Hub, typename T, typename Allocator,
-  typename U
->
-struct rebind_value_type<Hub<T, Allocator>, U>
-{
-  using type = Hub<U, boost::allocator_rebind_t<Allocator, U>>;
-};
-
-template<typename Hub, typename U>
-using rebind_value_type_t = typename rebind_value_type<Hub, U>::type;
-
 template<typename Hub, typename... Args>
 Hub noalloc_construct(
-  std::true_type, const typename Hub::allocator_type& al, Args&&... args)
+  std::true_type, const typename Hub::allocator_type&, Args&&... args)
 {
   return Hub(std::forward<Args>(args)...);
 }
@@ -102,7 +98,7 @@ void test_equal(const Container1& x, const Container2& y)
 template<typename Iterator, typename Mirror>
 void test_traversal(Iterator first, Iterator last, const Mirror& data)
 {
-  std::ptrdiff_t n = 0;
+  std::size_t n = 0;
   for(auto it = first; it != last; ++it, ++n)
   {
     BOOST_TEST(*it == data[n]);
@@ -213,8 +209,10 @@ void test(const typename Hub::allocator_type& al = {})
   {
     /* [sequence.reqmts/69.1] */
 
-    Hub x = noalloc_construct<Hub>(al, 20, 20);
-    BOOST_TEST_EQ(x.size(), 20);
+    using hub2 = rebind_value_type_t<Hub, unsigned int>;
+
+    hub2 x = noalloc_construct<hub2>(al, 20u, 20u);
+    BOOST_TEST_EQ(x.size(), 20u);
   }
   {
     Hub x = noalloc_construct<Hub>(al, rng.begin(), rng.end()), 
@@ -248,11 +246,11 @@ void test(const typename Hub::allocator_type& al = {})
   }
   {
     /* move construction with unequal allocators */
-    using hub = rebind_allocator_t<Hub, stateful_allocator<void>>;
-    using allocator_type = typename hub::allocator_type;
+    using hub2 = rebind_allocator_t<Hub, stateful_allocator<void>>;
+    using allocator_type2 = typename hub2::allocator_type;
 
-    hub x{rng.begin(), rng.end(), allocator_type{0}},
-        y{std::move(x), allocator_type{1}};
+    hub2 x{rng.begin(), rng.end(), allocator_type2{0}},
+         y{std::move(x), allocator_type2{1}};
     BOOST_TEST_EQ(x.get_allocator().state, 0);
     BOOST_TEST(x.empty());
     BOOST_TEST_EQ(y.get_allocator().state, 1);
@@ -283,7 +281,7 @@ void test(const typename Hub::allocator_type& al = {})
     test_equal(x, il);
   }
   {
-    Hub x{rng.begin(), rng.begin() + rng.size() / 2, al};
+    Hub x{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al};
     puncture(x);
     x.assign(rng.begin(), rng.end());
     test_equal(x, rng);
@@ -381,6 +379,35 @@ void test(const typename Hub::allocator_type& al = {})
     if(cx.max_size() < (size_type)(-1)) {
       BOOST_TEST_THROWS(x.reserve(cx.max_size() + 1), std::length_error);
     }
+  }
+
+  /* available list partitioned in (non-empty)|(empty) */
+
+  {
+    static std::size_t N = 64; /* implementation defined */
+
+    Hub x{N + 1, value_type(), al};
+    x.reserve(10 * N);
+    for(std::size_t i = 0; i < N; ++i) x.erase(x.begin());
+    x.trim_capacity();
+    BOOST_TEST_EQ(x.capacity(), N);
+
+    x = Hub{2 * N + 1, value_type(), al};
+    x.reserve(10 * N);
+    x.erase(x.begin(), std::next(x.begin(), (int)(2 * N)));
+    x.trim_capacity();
+    BOOST_TEST_EQ(x.capacity(), N);
+
+    x = Hub{3 * N, value_type(), al};
+    x.reserve(10 * N);
+    auto pos0 = x.begin(),
+         pos1 = std::next(x.begin(), (int)(N)),
+         pos2 = std::next(x.begin(), (int)(2 * N));
+    x.erase(pos2, std::next(pos2, (int)(N / 2)));
+    x.erase(pos1, std::next(pos1, (int)(N / 2)));
+    x.erase(pos0, std::next(pos0, (int)(N / 2)));
+    x.shrink_to_fit();
+    BOOST_TEST_EQ(x.capacity(), 2 * N);
   }
 
   /* modifiers */
@@ -482,13 +509,14 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST_EQ(x.size(), rng.size() - 1);
     BOOST_TEST(it == std::prev(x.cend()));
 
-    it = x.erase(std::next(x.cbegin(), x.size() / 2), x.cend());
-    BOOST_TEST_EQ(x.size(), (rng.size() - 1) / 2);
+    it = x.erase(
+      std::next(x.cbegin(), (difference_type)(x.size() / 2)), x.cend());
+    BOOST_TEST_EQ(x.size(), (difference_type)(rng.size() - 1) / 2);
     BOOST_TEST(it == x.cend());
   }
   {
     Hub x0{rng.begin(), rng.end(), al}, 
-        y0{rng.begin(), rng.begin() + rng.size() / 2, al},
+        y0{rng.begin(), rng.begin() + (difference_type)(rng.size() / 2), al},
         x = x0, y = y0;
 
     x.swap(x);
@@ -565,6 +593,8 @@ void test(const typename Hub::allocator_type& al = {})
     }
   }
 
+  test_global_erase<Hub>(rng, al);
+
   /* visitation */
 
   {
@@ -573,8 +603,8 @@ void test(const typename Hub::allocator_type& al = {})
     puncture(x);
 
     unsigned int res = 0;
-    auto         f = [&] (value_type& x) { res += (unsigned int)x;};
-    auto         cf = [&] (const value_type& x) { res += (unsigned int)x;};
+    auto         f = [&] (value_type& v) { res += (unsigned int)v;};
+    auto         cf = [&] (const value_type& v) { res += (unsigned int)v;};
 
     for(std::size_t i = 0; i < x.size() / 2; ++i) {
       auto first = std::next(x.begin(), (int)i),
@@ -583,10 +613,12 @@ void test(const typename Hub::allocator_type& al = {})
            clast = std::prev(x.cend(), (int)i);
 
       res = 0;
-      x.visit(first, last, f);
+      decltype(f) ret1 = boost::container::for_each(first, last, f);
+      (void)ret1;
       auto res1 = res;
       res = 0;
-      cx.visit(cfirst, clast, cf);
+      decltype(cf) ret2 = boost::container::for_each(cfirst, clast, cf);
+      (void)ret2;
       auto res2 = res;
       res = 0;
       std::for_each(first, last, f);
@@ -596,10 +628,12 @@ void test(const typename Hub::allocator_type& al = {})
     }
 
     res = 0;
-    x.visit_all(f);
+    decltype(f) ret1 = for_each(x, f); 
+    (void)ret1;
     auto res1 = res;
     res = 0;
-    cx.visit_all(cf);
+    decltype(cf) ret2 = for_each(cx, cf);
+    (void)ret2;
     auto res2 = res;
     res = 0;
     std::for_each(x.begin(), x.end(), f);
@@ -614,14 +648,14 @@ void test(const typename Hub::allocator_type& al = {})
 
     unsigned int res = 0;
     std::size_t  n = 0;
-    auto         f = [&] (value_type& x) {
+    auto         f = [&] (value_type& v) {
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
-    auto         cf = [&] (const value_type& x) { 
+    auto         cf = [&] (const value_type& v) { 
       if(!n--) return false;
-      res += (unsigned int)x;
+      res += (unsigned int)v;
       return true;
     };
 
@@ -630,15 +664,19 @@ void test(const typename Hub::allocator_type& al = {})
       auto cfirst = std::next(x.cbegin(), (int)i);
 
       res = 0;
-      n = std::distance(first, x.end()) / 2;
-      auto it1 = x.visit_while(first, x.end(), f);
+      n = (std::size_t)std::distance(first, x.end()) / 2;
+      std::pair<iterator, decltype(f)> ret1 =
+        boost::container::for_each_while(first, x.end(), f);
+      auto it1 = ret1.first;
       auto res1 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
-      auto it2 = cx.visit_while(cfirst, cx.end(), cf);
+      n = (std::size_t)std::distance(first, x.end()) / 2;
+      std::pair<const_iterator, decltype(cf)> ret2 =
+        boost::container::for_each_while(cfirst, cx.end(), cf);
+      auto it2 = ret2.first;
       auto res2 = res;
       res = 0;
-      n = std::distance(first, x.end()) / 2;
+      n = (std::size_t)std::distance(first, x.end()) / 2;
       auto it3 = std::find_if_not(first, x.end(), f);
       auto res3 = res;
       BOOST_TEST(it1 == it3);
@@ -649,11 +687,13 @@ void test(const typename Hub::allocator_type& al = {})
 
     res = 0;
     n = x.size();
-    auto it1 = x.visit_all_while(f);
+    std::pair<iterator, decltype(f)> ret1 = for_each_while(x, f);
+    auto it1 = ret1.first;
     auto res1 = res;
     res = 0;
     n = x.size();
-    auto it2 = cx.visit_all_while(cf);
+    std::pair<const_iterator, decltype(cf)> ret2 = for_each_while(cx, cf);
+    auto it2 = ret2.first;
     auto res2 = res;
     res = 0;
     n = x.size();
@@ -664,8 +704,6 @@ void test(const typename Hub::allocator_type& al = {})
     BOOST_TEST(it2 == it3);
     BOOST_TEST_EQ(res2, res3);
   }
-
-  test_global_erase<Hub>(rng, al);
 }
 
 template<template<typename...> class Hub>
@@ -702,6 +740,7 @@ int main()
   test<boost::container::hub<int>>();
   test<boost::container::hub<std::size_t>>();
 
+#if !defined(BOOST_CONTAINER_HUB_TEST_API_NO_INTERPROCESS)
   namespace bip = boost::interprocess;
   using segment_manager = bip::managed_shared_memory::segment_manager;
   using shared_int_allocator = bip::allocator<int, segment_manager>;
@@ -719,6 +758,7 @@ int main()
     bip::create_only, segment_name, 64 * 1024);
 
   test<shared_int_hub>(shared_int_allocator(segment.get_segment_manager()));
+#endif
 
 #if !defined(BOOST_NO_CXX17_HDR_MEMORY_RESOURCE)
   test<boost::container::pmr::hub<int>>();
