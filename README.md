@@ -1165,6 +1165,15 @@ Reserved blocks may only be deallocated with `shrink_to_fit` or `trim_capacity` 
 Reserved blocks are not used until all active blocks are full. New blocks are only allocated when 
 all the blocks in the container are full or if the user issues a `reserve` operation.
 
+Block storage follows a two-tier strategy. While the container holds fewer than 64 blocks
+(4,096 elements of capacity), each block is allocated individually. Past that point, blocks are
+carved from _slabs_: single allocations, obtained from the container's allocator, holding
+64 block headers followed by their 64 element arrays. Slabs reduce the number of allocator
+calls by a factor of 128 and lay out block metadata and element storage contiguously, which
+improves locality of block-level operations and iteration for large containers. The memory of
+a slab is returned to the allocator when its last block is deallocated, which has implications
+for the granularity of memory reclamation (see `trim_capacity`, `shrink_to_fit` and `splice`).
+
 #### Synopsis
 
 ```cpp
@@ -1441,7 +1450,10 @@ _Effects:_ Reallocates elements if needed so that the number of active blocks is
 If `capacity()` is already equal to `size()`, there are no effects. If an exception is thrown by `T` during reallocation, the effects are unspecified. <br/>
 _Complexity:_ If reallocation happens, linear in `size()`. Also, linear in the number of reserved blocks. <br/>
 _Remarks:_ If reallocation happens, the order of the elements in `*this` may change and all references, pointers, and iterators referring
-to the elements in `*this` are invalidated.
+to the elements in `*this` are invalidated. The memory of a slab-carved block (see
+[Class template `hub`](#class-template-hub)) is only returned to the allocator when all the blocks of its slab
+have been deallocated, so `capacity()` reduction is not necessarily matched by an equivalent
+release of allocated memory.
 
 `void trim_capacity() noexcept;`<br/>
 `void trim_capacity(size_type n) noexcept;`
@@ -1450,6 +1462,9 @@ _Effects:_ For the first overload, all reserved blocks are deallocated, and `cap
 For the second overload, if `n >= capacity()` is `true`, there are no effects; otherwise, `capacity()` is reduced to no less than `n`. <br/>
 _Complexity:_ Linear in the number of reserved blocks deallocated. <br/>
 _Remarks:_ All references, pointers, and iterators referring to elements in `*this`, as well as the past-the-end iterator, remain valid.
+The memory of a slab-carved block (see [Class template `boost::container::hub`](#class-template-boostcontainerhub)) is only returned to the
+allocator when all the blocks of its slab have been deallocated, so `capacity()` reduction is not
+necessarily matched by an equivalent release of allocated memory.
 
 #### Modifiers
 
@@ -1535,6 +1550,11 @@ Pointers and references to the moved elements of `x` now refer to those same ele
 Iterators referring to the moved elements continue to refer to their elements, but they now behave as iterators into `*this`, not into `x`. <br/>
 _Complexity:_ Linear in the sum of all element blocks in `x` plus all element blocks in `*this`. <br/>
 _Remarks:_ Reserved blocks in `x` are not transferred into `*this`.
+Transferred blocks carved from a slab of `x` (see [Class template `boost::container::hub`](#class-template-boostcontainerhub)) keep their
+association with that slab: the slab's memory is returned to the allocator, by whichever container
+deallocates its last block, only when all its blocks have been deallocated, regardless of the
+containers those blocks were transferred to. `x` retains its partially carved slab, if any, and
+will preferentially use its spare capacity for subsequently created blocks.
 
 `template<typename BinaryPredicate = std::equal_to<T>>`<br/>
 `  size_type unique(BinaryPredicate pred = BinaryPredicate());`

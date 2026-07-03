@@ -58,6 +58,7 @@ run test_empty_sort.cpp ;
 run test_exception_safety.cpp ;
 run test_new_extended_alignment.cpp ;
 run test_pocxx.cpp ;
+run test_slab.cpp ;
 run test_sort.cpp ;
 run test_stability.cpp ;
 run test_uses_allocator.cpp ;

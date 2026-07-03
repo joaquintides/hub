@@ -245,6 +245,19 @@ struct block_base
   mask_type mask;
 };
 
+/* Blocks past a container-size threshold are carved from slabs: single
+ * allocations holding several block headers and their element arrays.
+ * slab_base carries the coordination state; the storage layout is defined
+ * by hub (which knows T and the allocator).
+ */
+
+struct slab_base
+{
+  std::size_t live; /* carved blocks not yet deleted */
+  std::size_t used; /* blocks carved so far */
+  bool        open; /* still some hub's carving slab */
+};
+
 template<typename ValuePointer>
 struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 {
@@ -253,6 +266,7 @@ struct block: block_base<pointer_rebind_t<ValuePointer, void>>
 
   ValuePointer data() noexcept { return data_; }
   ValuePointer data_;
+  pointer_rebind_t<ValuePointer, slab_base> owner; /* null if standalone */
 
   static pointer 
   static_cast_block_pointer(typename super::pointer pbb) noexcept
@@ -260,13 +274,6 @@ struct block: block_base<pointer_rebind_t<ValuePointer, void>>
     return pointer_traits<pointer>::pointer_to(static_cast<block&>(*pbb));
   }
 };
-
-template<typename ValuePointer>
-void swap_payload(block<ValuePointer>& x, block<ValuePointer>& y) noexcept
-{
-  std::swap(x.mask, y.mask);
-  std::swap(x.data_, y.data_);
-}
 
 template<typename ValuePointer>
 struct block_list: block<ValuePointer>
@@ -1274,6 +1281,7 @@ public:
     std::swap(blist, x.blist);
     std::swap(num_blocks, x.num_blocks);
     std::swap(size_, x.size_);
+    std::swap(cur_slab, x.cur_slab);
   }
 
   void clear() noexcept { erase(begin(), end()); }
@@ -1410,10 +1418,11 @@ private:
   hub(
     hub&& x, const Allocator& al_, std::true_type /* equal allocs */) noexcept:
     allocator_base{empty_init, al_}, blist{std::move(x.blist)},
-    num_blocks{x.num_blocks}, size_{x.size_}
+    num_blocks{x.num_blocks}, size_{x.size_}, cur_slab{x.cur_slab}
   {
     x.num_blocks = 0;
     x.size_ = 0;
+    x.cur_slab = nullptr;
   }
 
   hub(
@@ -1424,8 +1433,10 @@ private:
       blist = std::move(x.blist);
       num_blocks = x.num_blocks;
       size_ = x.size_;
+      cur_slab = x.cur_slab;
       x.num_blocks = 0;
       x.size_ = 0;
+      x.cur_slab = nullptr;
     }
     else {
       reset_on_exit on_exit{x}; (void)on_exit;
@@ -1445,8 +1456,10 @@ private:
     blist = std::move(x.blist);
     num_blocks = x.num_blocks;
     size_ = x.size_;
+    cur_slab = x.cur_slab;
     x.num_blocks = 0;
     x.size_ = 0;
+    x.cur_slab = nullptr;
   }
 
   void move_assign(hub& x, std::false_type /* maybe move data */)
@@ -1471,19 +1484,134 @@ private:
     return block::static_cast_block_pointer(pbb);
   }
 
+  /* Two-tier block storage: while the container holds fewer than
+   * slab_threshold blocks, each block is allocated individually (header +
+   * element array), exactly as in previous versions. Past the threshold,
+   * blocks are carved from slabs: single allocations laid out as
+   * [slab_base | slab_blocks block headers | slab_blocks element arrays],
+   * obtained through the container's allocator rebound to slab_storage.
+   * A slab is deallocated when its last carved block is deleted and no
+   * container is carving from it anymore (open == false); note that, after
+   * splice, the container performing the final block deletion (which, per
+   * splice's preconditions, uses an equal allocator) may be different from
+   * the one that allocated the slab.
+   */
+
+  using slab_base = hub_detail::slab_base;
+  using slab_base_pointer =
+    hub_detail::pointer_rebind_t<pointer, slab_base>;
+
+  static constexpr std::size_t slab_blocks = 64;
+  static constexpr std::size_t slab_threshold = 64; /* blocks */
+
+  static constexpr std::size_t slab_hdr_off =
+    (sizeof(slab_base) + alignof(block) - 1) / alignof(block)
+    * alignof(block);
+  static constexpr std::size_t slab_data_off =
+    (slab_hdr_off + slab_blocks * sizeof(block) + alignof(T) - 1)
+    / alignof(T) * alignof(T);
+  static constexpr std::size_t slab_bytes =
+    slab_data_off + slab_blocks * (std::size_t)N * sizeof(T);
+  static constexpr std::size_t slab_align_ =
+    alignof(slab_base) > alignof(block) ?
+      (alignof(slab_base) > alignof(T) ? alignof(slab_base) : alignof(T)) :
+      (alignof(block) > alignof(T) ? alignof(block) : alignof(T));
+
+  struct alignas(slab_align_) slab_storage
+  {
+    unsigned char bytes[slab_bytes];
+  };
+
+  using slab_storage_allocator = allocator_rebind_t<Allocator, slab_storage>;
+  using slab_storage_pointer = allocator_pointer_t<slab_storage_allocator>;
+
+  static block_pointer slab_block_at(slab_base* s, std::size_t i) noexcept
+  {
+    auto pb = reinterpret_cast<block*>(
+      reinterpret_cast<unsigned char*>(s) + slab_hdr_off) + i;
+    return boost::pointer_traits<block_pointer>::pointer_to(*pb);
+  }
+  static pointer slab_data_at(slab_base* s, std::size_t i) noexcept
+  {
+    auto pd = reinterpret_cast<T*>(
+      reinterpret_cast<unsigned char*>(s) + slab_data_off) +
+      i * (std::size_t)N;
+    return boost::pointer_traits<pointer>::pointer_to(*pd);
+  }
+
+  slab_base_pointer allocate_slab()
+  {
+    slab_storage_allocator sal(al());
+    auto ps = allocator_allocate(sal, 1); /* may throw, state unchanged */
+    auto s = reinterpret_cast<slab_base*>(boost::to_address(ps));
+    s->live = 0;
+    s->used = 0;
+    s->open = true;
+    return boost::pointer_traits<slab_base_pointer>::pointer_to(*s);
+  }
+
+  void deallocate_slab(slab_base* s) noexcept
+  {
+    slab_storage_allocator sal(al());
+    allocator_deallocate(
+      sal,
+      boost::pointer_traits<slab_storage_pointer>::pointer_to(
+        *reinterpret_cast<slab_storage*>(s)),
+      1);
+  }
+
+  void retire_cur_slab() noexcept
+  {
+    if(cur_slab) {
+      auto s = boost::to_address(cur_slab);
+      s->open = false;
+      if(s->live == 0) deallocate_slab(s);
+      cur_slab = nullptr;
+    }
+  }
+
+  block_pointer carve_block_from_cur_slab() noexcept
+  {
+    auto s = boost::to_address(cur_slab);
+    auto i = s->used++;
+    ++s->live;
+    auto pb = slab_block_at(s, i);
+    pb->mask = 0;
+    pb->data_ = slab_data_at(s, i);
+    pb->owner = cur_slab;
+    return pb;
+  }
+
   block_pointer create_new_available_block()
   {
-    auto pb = allocator_allocate(al(), 1);
-    pb->mask = 0;
-    BOOST_TRY {
-      allocator_rebind_t<Allocator, value_type> val(al());
-      pb->data_ = allocator_allocate(val, N);
+    block_pointer pb;
+    if(
+      cur_slab &&
+      boost::to_address(cur_slab)->used < slab_blocks) {
+      /* keep carving from the open slab (also below the threshold, e.g.
+       * when blocks have been transferred away by splice) */
+      pb = carve_block_from_cur_slab();
     }
-    BOOST_CATCH(...) {
-      allocator_deallocate(al(), pb, 1);
-      BOOST_RETHROW;
+    else if(num_blocks < slab_threshold) {
+      pb = allocator_allocate(al(), 1);
+      pb->mask = 0;
+      BOOST_TRY {
+        allocator_rebind_t<Allocator, value_type> val(al());
+        pb->data_ = allocator_allocate(val, N);
+      }
+      BOOST_CATCH(...) {
+        allocator_deallocate(al(), pb, 1);
+        BOOST_RETHROW;
+      }
+      BOOST_CATCH_END
+      pb->owner = nullptr;
     }
-    BOOST_CATCH_END
+    else {
+      auto ns = allocate_slab(); /* may throw, state unchanged */
+      retire_cur_slab();
+      cur_slab = ns;
+      pb = carve_block_from_cur_slab();
+    }
     blist.link_available_at_back(pb);
     ++num_blocks;
     return pb;
@@ -1491,9 +1619,15 @@ private:
 
   void delete_block(block_pointer pb) noexcept
   {
-    allocator_rebind_t<Allocator, value_type> val(al());
-    allocator_deallocate(val, pb->data(), N);
-    allocator_deallocate(al(), pb, 1);
+    if(pb->owner) {
+      auto s = boost::to_address(pb->owner);
+      if(--s->live == 0 && !s->open) deallocate_slab(s);
+    }
+    else {
+      allocator_rebind_t<Allocator, value_type> val(al());
+      allocator_deallocate(val, pb->data(), N);
+      allocator_deallocate(al(), pb, 1);
+    }
   }
 
   BOOST_FORCEINLINE block_pointer retrieve_available_block(int& n)
@@ -1574,6 +1708,7 @@ private:
       delete_block(pb);
     }
     blist.reset();
+    retire_cur_slab();
     num_blocks = 0;
     size_ = 0;
   }
@@ -1807,10 +1942,9 @@ private:
   {
     auto cx = core::popcount(pbx->mask),
          cy = core::popcount(pby->mask);
-    if(cx < cy) {
-      std::swap(cx, cy);
-      swap_payload(*pbx, *pby);
-    }
+    /* Payload swapping is not possible anymore: a block's header and its
+     * element array must stay paired for slab ownership tracking, so we
+     * always move elements from pby into pbx. */
     auto c = (std::min)(N - cx, cy);
     while(c--) {
       auto n = hub_detail::unchecked_countr_one(pbx->mask);
@@ -1840,6 +1974,7 @@ private:
   block_list blist;
   size_type  num_blocks = 0;
   size_type  size_ = 0;
+  slab_base_pointer cur_slab = nullptr;
 };
 
 #if !defined(BOOST_NO_CXX17_DEDUCTION_GUIDES)
