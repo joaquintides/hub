@@ -1,5 +1,8 @@
 # Hub container
 
+> [!NOTE]
+> `boost::container::hub` now lives in [Boost.Container](https://www.boost.org/doc/libs/latest/doc/html/container/non_standard_containers.html#container.non_standard_containers.hub). Please go there for the latest version and further upgrades. This repo is kept for historical reasons but will likely not be maintained.
+
 [![Branch](https://img.shields.io/badge/branch-develop-brightgreen.svg)](https://github.com/joaquintides/hub/tree/develop) [![CI](https://github.com/joaquintides/hub/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/joaquintides/hub/actions/workflows/ci.yml) [![CI](https://ci.appveyor.com/api/projects/status/github/joaquintides/hub?branch=develop&svg=true)](https://ci.appveyor.com/project/joaquintides/hub) [![Coverage](https://joaquintides.github.io/hub/develop/gcovr/badges/coverage-lines.svg)](https://joaquintides.github.io/hub/develop/gcovr/index.html) <br/>
 [![BSL 1.0](https://img.shields.io/badge/license-BSL_1.0-blue.svg)](https://www.boost.org/users/license.html) <img alt="C++11 required" src="https://img.shields.io/badge/standard-C%2b%2b11-blue.svg"> <img alt="Header-only library" src="https://img.shields.io/badge/build-header--only-blue.svg">
 
